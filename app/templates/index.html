@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Еврокомиссия</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        /* Небольшой стилизм, чтобы текст в таблице не переносился криво */
+        table td, table th {
+            white-space: nowrap;
+            text-align: center;
+        }
+        .comment-cell {
+            text-align: left;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    </style>
+</head>
+<body>
+<main class="container-fluid">
+    <h1>🎼 Еврокомиссия</h1>
+
+    <figure>
+        <table>
+            <thead>
+            <!-- Уровень 1: Главные категории -->
+            <tr>
+                <th rowspan="3">Страна</th>
+                <th colspan="{{ users|length * 2 + 1 }}">Первое прослушивание</th>
+                <th colspan="{{ users|length * 2 + 1 }}">Финальное прослушивание</th>
+            </tr>
+
+            <!-- Уровень 2: Имена юзеров + Средняя -->
+            <tr>
+                {% for user in users %}
+                <th colspan="2">{{ user.username }}</th>
+                {% endfor %}
+                <th rowspan="2">Средняя</th>
+
+                {% for user in users %}
+                <th colspan="2">{{ user.username }}</th>
+                {% endfor %}
+                <th rowspan="2">Средняя</th>
+            </tr>
+
+            <!-- Уровень 3: Оценка / Мнение -->
+            <tr>
+                {% for user in users %}
+                <th>Оценка</th>
+                <th>Мнение</th>
+                {% endfor %}
+
+                {% for user in users %}
+                <th>Оценка</th>
+                <th>Мнение</th>
+                {% endfor %}
+            </tr>
+            </thead>
+
+            <tbody>
+            {% for song in songs %}
+            <tr>
+                <!-- Первый столбец: Страна (или Песня) -->
+                <td>{{ song.country.name }} <br><small>{{ song.name }}</small></td>
+
+                <!-- Блок "Первое прослушивание" -->
+                <!-- Используем namespace для подсчета средней оценки -->
+                {% set ns_first = namespace(total=0, count=0) %}
+                {% for user in users %}
+                {% set op = opinions_map.get((song.id, user.id, 'FIRST')) %}
+                {% if op %}
+                <td>{{ op.score }}</td>
+                <td class="comment-cell">{{ op.note or '-' }}</td>
+                {% set ns_first.total = ns_first.total + op.score %}
+                {% set ns_first.count = ns_first.count + 1 %}
+                {% else %}
+                <td>-</td>
+                <td>-</td>
+                {% endif %}
+                {% endfor %}
+
+                <!-- Средняя за 1-е прослушивание -->
+                <td>
+                    <strong>
+                        {% if ns_first.count > 0 %}
+                        {{ (ns_first.total / ns_first.count)|round(1) }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </strong>
+                </td>
+
+                <!-- Блок "Финальное прослушивание" -->
+                {% set ns_final = namespace(total=0, count=0) %}
+                {% for user in users %}
+                {% set op = opinions_map.get((song.id, user.id, 'FINAL')) %}
+                {% if op %}
+                <td>{{ op.score }}</td>
+                <td class="comment-cell">{{ op.note or '-' }}</td>
+                {% set ns_final.total = ns_final.total + op.score %}
+                {% set ns_final.count = ns_final.count + 1 %}
+                {% else %}
+                <td>-</td>
+                <td>-</td>
+                {% endif %}
+                {% endfor %}
+
+                <!-- Средняя за финал -->
+                <td>
+                    <strong>
+                        {% if ns_final.count > 0 %}
+                        {{ (ns_final.total / ns_final.count)|round(1) }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </strong>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </figure>
+</main>
+</body>
+</html>

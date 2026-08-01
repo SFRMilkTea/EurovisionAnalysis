@@ -1,11 +1,19 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    database_url: str = "postgresql+psycopg://postgres:1234@localhost:5432/eurovision_analysis"
+    SECRET_KEY: str
+    ALGORITHM: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    # Указываем абсолютный путь к файлу
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / "app/.env"),
+        env_file_encoding="utf-8"
+    )
 
 
 settings = Settings()
-

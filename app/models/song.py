@@ -1,7 +1,7 @@
 import enum
 
 from sqlalchemy import BigInteger, CheckConstraint, Enum, ForeignKey, Identity, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 
@@ -38,3 +38,5 @@ class Song(Base):
     danceability: Mapped[int | None] = mapped_column(Integer, nullable=True)
     happiness: Mapped[int | None] = mapped_column(Integer, nullable=True)
     url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    country: Mapped["Country"] = relationship(back_populates="songs")
