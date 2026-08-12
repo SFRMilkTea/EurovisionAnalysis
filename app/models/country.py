@@ -11,4 +11,6 @@ class Country(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+
     songs: Mapped[List["Song"]] = relationship(back_populates="country")
+    events: Mapped[List["Event"]] = relationship(back_populates="host")
