@@ -27,6 +27,12 @@ class Song(Base):
         nullable=False,
         index=True,
     )
+    event_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("events.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     artist: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -40,3 +46,4 @@ class Song(Base):
     url: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     country: Mapped["Country"] = relationship(back_populates="songs")
+    event: Mapped["Event | None"] = relationship(back_populates="songs")

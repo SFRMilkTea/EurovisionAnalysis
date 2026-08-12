@@ -1,4 +1,5 @@
 from app.models.country import Country
+from app.models.event import Event
 from app.models.genre import Genre
 from app.models.language import Language
 from app.models.opinion import Opinion, Stage
@@ -9,6 +10,7 @@ from app.models.user import User
 
 __all__ = [
     "Country",
+    "Event",
     "Genre",
     "Language",
     "Opinion",
