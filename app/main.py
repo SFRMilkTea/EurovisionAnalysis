@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -99,6 +99,8 @@ def read_root(
         select(models.Event).order_by(models.Event.year.desc(), models.Event.name)
     ).all()
     selected_event = next((event for event in events if event.id == event_id), None)
+    if selected_event is None:
+        selected_event = next((event for event in events if event.id == 2), None)
     if selected_event is None and events:
         selected_event = events[0]
 
@@ -139,7 +141,7 @@ def save_opinion(
 ):
     current_user = get_current_user(request, session)
     if current_user is None:
-        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+        return JSONResponse({"detail": "Требуется вход"}, status_code=status.HTTP_401_UNAUTHORIZED)
     if score not in {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Недопустимая оценка")
     song = session.get(models.Song, song_id)
@@ -164,8 +166,7 @@ def save_opinion(
     opinion.score = score
     opinion.note = note.strip() or None if note else None
     session.commit()
-    redirect_url = f"/?event_id={event_id}" if event_id is not None else "/"
-    return RedirectResponse(redirect_url, status_code=status.HTTP_303_SEE_OTHER)
+    return {"ok": True}
 
 
 @app.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)

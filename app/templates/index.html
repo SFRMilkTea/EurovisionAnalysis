@@ -6,17 +6,140 @@
     <title>Еврокомиссия</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <style>
-        table td, table th { white-space: nowrap; text-align: center; vertical-align: middle; }
-        .comment-cell { min-width: 12rem; }
-        .edit-form { display: contents; }
-        .edit-score { width: 5rem; margin: 0; }
-        .edit-note { min-width: 10rem; margin: 0; }
-        .save-button { margin: .4rem 0 0; padding: .25rem .5rem; font-size: .75rem; }
-        .current-user-column { background: var(--pico-primary-focus); }
-        .event-tabs { display: flex; gap: .5rem; overflow-x: auto; margin: 1rem 0; padding-bottom: .25rem; }
-        .event-tabs a { display: block; white-space: nowrap; padding: .5rem .75rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); text-decoration: none; }
-        .event-tabs a.active { color: var(--pico-primary-inverse); background: var(--pico-primary); border-color: var(--pico-primary); }
-        header { display: flex; justify-content: space-between; align-items: center; }
+        /* Настройки контейнера таблицы */
+        .table-wrapper {
+            overflow-x: auto;
+            overflow-y: auto;
+            max-width: 100%;
+            max-height: 80vh; /* Ограничиваем высоту, чтобы появился вертикальный скролл */
+            margin-bottom: 1rem;
+            border: 1px solid var(--pico-muted-border-color);
+            border-radius: var(--pico-border-radius);
+        }
+
+        table {
+            table-layout: fixed; /* Запрещаем браузеру менять ширину колонок */
+            width: max-content;
+            min-width: 100%;
+            border-collapse: collapse;
+        }
+
+        table td, table th {
+            text-align: center;
+            vertical-align: middle;
+            padding: 0.4rem 0.5rem;
+            border: 1px solid var(--pico-muted-border-color);
+            overflow: hidden;
+        }
+
+        /* Фиксируем шапку при вертикальном скролле */
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 3;
+            background: var(--pico-card-background-color);
+        }
+
+        /* Липкий первый столбец */
+        .sticky-col {
+            position: sticky;
+            left: 0;
+            background: var(--pico-background-color);
+            z-index: 2;
+            text-align: left;
+            white-space: nowrap;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.05);
+        }
+        /* Уголок: шапка + первый столбец (нужен z-index выше) */
+        thead .sticky-col {
+            z-index: 4;
+            background: var(--pico-card-background-color);
+        }
+
+        /* Выделение текущего пользователя */
+        .current-user-column {
+            background: rgba(var(--pico-primary-rgb), 0.07);
+        }
+        thead .current-user-column {
+            background: rgba(var(--pico-primary-rgb), 0.1);
+        }
+
+        .comment-cell {
+            width: 20rem;
+            min-width: 20rem;
+            text-align: left;
+            word-break: break-word;
+        }
+
+        .editable-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 2.5rem;
+        }
+
+        /* Жестко перебиваем стили Pico CSS для инпутов внутри таблицы */
+        .editable-control select,
+        .editable-control input {
+            margin: 0 !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            height: 2.25rem;
+            padding: 0 0.4rem;
+            line-height: 1.5;
+            font-size: 0.9rem;
+        }
+
+        /* Выделение средних оценок */
+        .avg-cell {
+            font-weight: bold;
+            font-size: 1.05rem;
+            background: var(--pico-card-background-color);
+            border-left: 2px solid var(--pico-muted-border-color);
+            border-right: 2px solid var(--pico-muted-border-color);
+        }
+
+        /* Вкладки мероприятий */
+        .event-tabs {
+            display: flex;
+            gap: .5rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            padding-bottom: .5rem;
+            border-bottom: 1px solid var(--pico-muted-border-color);
+        }
+        .event-tabs a {
+            display: block;
+            white-space: nowrap;
+            padding: .4rem .8rem;
+            border: 1px solid transparent;
+            border-radius: var(--pico-border-radius);
+            text-decoration: none;
+            color: var(--pico-muted-color);
+            transition: all 0.2s ease;
+        }
+        .event-tabs a:hover {
+            background: var(--pico-secondary-background);
+            color: var(--pico-primary);
+        }
+        .event-tabs a.active {
+            color: var(--pico-primary-inverse);
+            background: var(--pico-primary);
+        }
+
+        /* Шапка */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            border-bottom: 1px solid var(--pico-muted-border-color);
+            padding-bottom: 1rem;
+            margin-bottom: 1rem;
+        }
+        header h1 { margin: 0; }
+        header div { display: flex; align-items: center; gap: 1rem; }
         header form { margin: 0; }
     </style>
 </head>
@@ -26,10 +149,10 @@
         <h1>🎵 Еврокомиссия</h1>
         <div>
             <span>Вы вошли как <strong>{{ current_user.username }}</strong></span>
-            <form method="post" action="/logout"><button type="submit" class="secondary">Выйти</button></form>
+            <form method="post" action="/logout"><button type="submit" class="secondary outline">Выйти</button></form>
         </div>
     </header>
-    <p>Редактировать можно только столбцы с вашим именем.</p>
+    <p><small>Кто найдет больше багов, тому дадим эксклюзивный смайлик в имя</small></p>
 
     {% if events %}
     <nav class="event-tabs" aria-label="Мероприятия">
@@ -42,11 +165,11 @@
     <p>Мероприятия пока не добавлены.</p>
     {% endif %}
 
-    <figure>
+    <div class="table-wrapper">
         <table>
             <thead>
             <tr>
-                <th rowspan="3">Страна / песня</th>
+                <th rowspan="3" class="sticky-col" style="width: 200px;">Страна / песня</th>
                 <th colspan="{{ users|length * 2 + 1 }}">Первое прослушивание</th>
                 <th colspan="{{ users|length * 2 + 1 }}">Финальное прослушивание</th>
             </tr>
@@ -54,53 +177,130 @@
                 {% for user in users %}
                 <th colspan="2" {% if user.id == current_user.id %}class="current-user-column"{% endif %}>{{ user.username }}</th>
                 {% endfor %}
-                <th rowspan="2">Средняя</th>
+                <th rowspan="2" class="avg-cell" style="width: 80px;">Средняя</th>
                 {% for user in users %}
                 <th colspan="2" {% if user.id == current_user.id %}class="current-user-column"{% endif %}>{{ user.username }}</th>
                 {% endfor %}
-                <th rowspan="2">Средняя</th>
+                <th rowspan="2" class="avg-cell" style="width: 80px;">Средняя</th>
             </tr>
             <tr>
-                {% for user in users %}<th>Оценка</th><th>Мнение</th>{% endfor %}
-                {% for user in users %}<th>Оценка</th><th>Мнение</th>{% endfor %}
+                {% for user in users %}
+                <th style="width: 70px;">Оценка</th>
+                <th style="width: 550px;">Мнение</th>
+                {% endfor %}
+                {% for user in users %}
+                <th style="width: 70px;">Оценка</th>
+                <th style="width: 550px;">Мнение</th>
+                {% endfor %}
             </tr>
             </thead>
             <tbody>
             {% for song in songs %}
             <tr>
-                <td>{{ song.country.name }}<br><small>{{ song.name }}</small></td>
+                <td class="sticky-col">
+                    <strong>{{ song.country.name }}</strong><br>
+                    <small>{{ song.name }}</small>
+                </td>
+
+                {# Первое прослушивание #}
                 {% set first = namespace(total=0, count=0) %}
                 {% for user in users %}
                 {% set op = opinions_map.get((song.id, user.id, 'FIRST')) %}
                 {% if op %}{% set first.total = first.total + op.score %}{% set first.count = first.count + 1 %}{% endif %}
                 {% if user.id == current_user.id %}
-                <form id="first-{{ song.id }}" method="post" action="/opinions/save" class="edit-form">
-                    <input type="hidden" name="song_id" value="{{ song.id }}">{% if selected_event %}<input type="hidden" name="event_id" value="{{ selected_event.id }}">{% endif %}<input type="hidden" name="stage" value="FIRST">
-                </form>
-                <td class="current-user-column"><select form="first-{{ song.id }}" class="edit-score" name="score">{% for value in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}<option value="{{ value }}" {% if op and op.score == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></td>
-                <td class="comment-cell current-user-column"><input form="first-{{ song.id }}" class="edit-note" name="note" value="{{ op.note if op and op.note else '' }}" aria-label="Мнение о песне"><button form="first-{{ song.id }}" type="submit" class="save-button">Сохранить</button></td>
-                {% else %}<td>{{ op.score if op else '-' }}</td><td class="comment-cell">{{ op.note if op and op.note else '-' }}</td>{% endif %}
+                <td class="current-user-column"><div class="editable-control">
+                    <select form="first-{{ song.id }}" name="score">
+                        {% for value in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
+                        <option value="{{ value }}" {% if op and op.score == value %}selected{% endif %}>{{ value }}</option>
+                        {% endfor %}
+                    </select>
+                </div></td>
+                <td class="comment-cell current-user-column"><div class="editable-control">
+                    <input form="first-{{ song.id }}" type="text" name="note" value="{{ op.note if op and op.note else '' }}" aria-label="Мнение о песне" placeholder="Напишите мнение...">
+                </div></td>
+                {% else %}
+                <td>{{ op.score if op else '–' }}</td>
+                <td class="comment-cell">{{ op.note if op and op.note else '–' }}</td>
+                {% endif %}
                 {% endfor %}
-                <td><strong>{{ (first.total / first.count)|round(1) if first.count else '-' }}</strong></td>
+                <td class="avg-cell">{{ (first.total / first.count)|round(1) if first.count else '–' }}</td>
 
+                {# Финальное прослушивание #}
                 {% set final = namespace(total=0, count=0) %}
                 {% for user in users %}
                 {% set op = opinions_map.get((song.id, user.id, 'FINAL')) %}
                 {% if op %}{% set final.total = final.total + op.score %}{% set final.count = final.count + 1 %}{% endif %}
                 {% if user.id == current_user.id %}
-                <form id="final-{{ song.id }}" method="post" action="/opinions/save" class="edit-form">
-                    <input type="hidden" name="song_id" value="{{ song.id }}">{% if selected_event %}<input type="hidden" name="event_id" value="{{ selected_event.id }}">{% endif %}<input type="hidden" name="stage" value="FINAL">
-                </form>
-                <td class="current-user-column"><select form="final-{{ song.id }}" class="edit-score" name="score">{% for value in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}<option value="{{ value }}" {% if op and op.score == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></td>
-                <td class="comment-cell current-user-column"><input form="final-{{ song.id }}" class="edit-note" name="note" value="{{ op.note if op and op.note else '' }}" aria-label="Финальное мнение о песне"><button form="final-{{ song.id }}" type="submit" class="save-button">Сохранить</button></td>
-                {% else %}<td>{{ op.score if op else '-' }}</td><td class="comment-cell">{{ op.note if op and op.note else '-' }}</td>{% endif %}
+                <td class="current-user-column"><div class="editable-control">
+                    <select form="final-{{ song.id }}" name="score">
+                        {% for value in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
+                        <option value="{{ value }}" {% if op and op.score == value %}selected{% endif %}>{{ value }}</option>
+                        {% endfor %}
+                    </select>
+                </div></td>
+                <td class="comment-cell current-user-column"><div class="editable-control">
+                    <input form="final-{{ song.id }}" type="text" name="note" value="{{ op.note if op and op.note else '' }}" aria-label="Финальное мнение о песне" placeholder="Напишите мнение...">
+                </div></td>
+                {% else %}
+                <td>{{ op.score if op else '–' }}</td>
+                <td class="comment-cell">{{ op.note if op and op.note else '–' }}</td>
+                {% endif %}
                 {% endfor %}
-                <td><strong>{{ (final.total / final.count)|round(1) if final.count else '-' }}</strong></td>
+                <td class="avg-cell">{{ (final.total / final.count)|round(1) if final.count else '–' }}</td>
             </tr>
             {% endfor %}
             </tbody>
         </table>
-    </figure>
+    </div>
 </main>
+
+{#
+  ВАЖНО: Скрытые формы находятся ВНЕ таблицы.
+  Это предотвращает поломку DOM-дерева таблицы и гарантирует идеальное выравнивание.
+#}
+<div class="hidden-forms" style="display: none;" aria-hidden="true">
+    {% for song in songs %}
+    {% if selected_event %}
+    <form id="first-{{ song.id }}" method="post" action="/opinions/save">
+        <input type="hidden" name="song_id" value="{{ song.id }}">
+        <input type="hidden" name="event_id" value="{{ selected_event.id }}">
+        <input type="hidden" name="stage" value="FIRST">
+    </form>
+    <form id="final-{{ song.id }}" method="post" action="/opinions/save">
+        <input type="hidden" name="song_id" value="{{ song.id }}">
+        <input type="hidden" name="event_id" value="{{ selected_event.id }}">
+        <input type="hidden" name="stage" value="FINAL">
+    </form>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<script>
+    async function saveForm(form, fields) {
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form)
+            });
+
+            if (!response.ok) throw new Error('Network response was not ok');
+
+        } catch (error) {
+            console.error('Save failed:', error);
+        }
+    }
+
+    // Находим все скрытые формы и привязываем события к их полям
+    document.querySelectorAll('.hidden-forms form').forEach((form) => {
+        const fields = document.querySelectorAll(`[form="${form.id}"]`);
+        fields.forEach((field) => {
+            if (field.tagName === 'SELECT') {
+                field.addEventListener('change', () => saveForm(form, fields));
+            } else {
+                field.addEventListener('blur', () => saveForm(form, fields));
+            }
+        });
+    });
+</script>
 </body>
 </html>
