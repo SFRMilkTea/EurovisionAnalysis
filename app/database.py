@@ -1,3 +1,5 @@
+import os
+
 from sqlalchemy import MetaData, create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 from fastapi import Depends # Понадобится для зависимости в FastAPI
@@ -17,12 +19,13 @@ class Base(DeclarativeBase):
 # --- ДОБАВЛЯЕМ ПОДКЛЮЧЕНИЕ ---
 
 # Строка подключения (замени пароль и название БД на свои)
-DATABASE_URL = "postgresql://postgres:1234@localhost:5432/eurovision_analysis"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://postgres:1234@localhost:5432/eurovision_analysis",
+)
 
-# Создаем движок. echo=True покажет SQL-запросы в терминале — очень удобно дебажить!
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 
-# Функция, которую будет использовать FastAPI
 def get_session():
     with Session(engine) as session:
         yield session
