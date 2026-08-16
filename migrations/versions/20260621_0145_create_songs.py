@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision: str = "20260621_0145"
 down_revision: str | None = "20260621_0135"
@@ -17,7 +18,9 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    vocal = sa.Enum("male", "female", "mix", name="vocal")
+    # The enum is created explicitly below.  Disable automatic creation while
+    # creating the table, otherwise PostgreSQL receives CREATE TYPE twice.
+    vocal = postgresql.ENUM("male", "female", "mix", name="vocal", create_type=False)
     vocal.create(op.get_bind(), checkfirst=True)
 
     op.create_table(
