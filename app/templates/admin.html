@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Администрирование — Еврокомиссия</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        header { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+        header nav, header form { margin:0; } header nav { display:flex; gap:.6rem; align-items:center; }
+        .grid { align-items:start; } .compact { margin-bottom:0; }
+        .compact input, .compact select { margin-bottom:.65rem; }
+        .notice { padding:.8rem 1rem; border-radius:var(--pico-border-radius); background:var(--pico-ins-color); }
+        .notice.error { background:var(--pico-del-color); color:var(--pico-primary-inverse); }
+        .list { max-height:17rem; overflow:auto; } .list li { display:flex; justify-content:space-between; align-items:center; gap:.5rem; }
+        .list form { margin:0; } .delete { padding:.2rem .5rem; margin:0; font-size:.8rem; }
+        fieldset { margin-bottom:.75rem; } .wide { grid-column:1 / -1; }
+    </style>
+</head>
+<body>
+<main class="container">
+    <header>
+        <div><h1>Администрирование</h1><small>Заполнение базы данных конкурса</small></div>
+        <nav><a href="/" role="button" class="secondary outline">К таблице оценок</a>{% if current_user %}<form method="post" action="/logout"><button class="secondary outline">Выйти</button></form>{% endif %}</nav>
+    </header>
+
+    {% if message %}<p class="notice {{ message.kind }}">{{ message.text }}</p>{% endif %}
+
+    <article>
+        <h2>Создать пользователя</h2>
+        <form method="post" action="/admin/users" class="grid compact">
+            <input name="username" minlength="3" maxlength="50" pattern="[A-Za-z0-9_-]+" placeholder="Логин" required>
+            <input type="email" name="email" placeholder="Электронная почта" required>
+            <input type="password" name="password" minlength="8" maxlength="72" placeholder="Пароль" required>
+            <label><input type="checkbox" name="is_admin"> Администратор</label>
+            <button>Создать пользователя</button>
+        </form>
+    </article>
+
+    <section class="grid">
+        <article>
+            <h3>Страна</h3>
+            <form class="compact" method="post" action="/admin/countries"><input name="name" placeholder="Например, Швеция" required><button>Добавить</button></form>
+            <ul class="list">{% for country in countries %}<li>{{ country.name }}<form method="post" action="/admin/countries/{{ country.id }}/delete"><button class="outline contrast delete" onclick="return confirm('Удалить страну и связанные данные?')">Удалить</button></form></li>{% else %}<li>Пока нет стран</li>{% endfor %}</ul>
+        </article>
+        <article>
+            <h3>Жанр</h3>
+            <form class="compact" method="post" action="/admin/catalog/genres"><input name="name" placeholder="Например, Поп" required><button>Добавить</button></form>
+            <ul class="list">{% for genre in genres %}<li>{{ genre.name }}<form method="post" action="/admin/genres/{{ genre.id }}/delete"><button class="outline contrast delete">Удалить</button></form></li>{% else %}<li>Пока нет жанров</li>{% endfor %}</ul>
+        </article>
+        <article>
+            <h3>Язык</h3>
+            <form class="compact" method="post" action="/admin/catalog/languages"><input name="name" placeholder="Например, Английский" required><button>Добавить</button></form>
+            <ul class="list">{% for language in languages %}<li>{{ language.name }}<form method="post" action="/admin/languages/{{ language.id }}/delete"><button class="outline contrast delete">Удалить</button></form></li>{% else %}<li>Пока нет языков</li>{% endfor %}</ul>
+        </article>
+    </section>
+
+    <section class="grid">
+        <article>
+            <h2>Мероприятие</h2>
+            {% if countries %}
+            <form method="post" action="/admin/events">
+                <input name="name" placeholder="Название конкурса" required>
+                <input type="number" name="year" min="1956" max="2100" placeholder="Год" required>
+                <select name="host_id" required>{% for country in countries %}<option value="{{ country.id }}">{{ country.name }}</option>{% endfor %}</select>
+                <button>Добавить мероприятие</button>
+            </form>
+            {% else %}<p>Сначала добавьте хотя бы одну страну.</p>{% endif %}
+            <ul class="list">{% for event in events %}<li>{{ event.name }} ({{ event.year }}, {{ event.host.name }})<form method="post" action="/admin/events/{{ event.id }}/delete"><button class="outline contrast delete" onclick="return confirm('Удалить мероприятие? Песни останутся без мероприятия.')">Удалить</button></form></li>{% else %}<li>Пока нет мероприятий</li>{% endfor %}</ul>
+        </article>
+        <article>
+            <h2>Песня</h2>
+            {% if countries %}
+            <form method="post" action="/admin/songs">
+                <div class="grid"><input name="name" placeholder="Название песни" required><input name="artist" placeholder="Исполнитель" required></div>
+                <div class="grid"><select name="country_id" required>{% for country in countries %}<option value="{{ country.id }}">{{ country.name }}</option>{% endfor %}</select><select name="event_id"><option value="">Без мероприятия</option>{% for event in events %}<option value="{{ event.id }}">{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
+                <div class="grid"><input type="number" name="year" min="1956" max="2100" placeholder="Год" required><select name="vocal">{% for vocal in vocals %}<option value="{{ vocal.value }}">{{ vocal.value }}</option>{% endfor %}</select></div>
+                <details><summary>Музыкальные характеристики и связи</summary>
+                    <div class="grid"><input type="number" name="bpm" min="0" placeholder="BPM"><input name="key" maxlength="16" placeholder="Тональность"></div>
+                    <div class="grid"><input type="number" name="energy" min="0" max="100" placeholder="Энергичность (0–100)"><input type="number" name="danceability" min="0" max="100" placeholder="Танцевальность (0–100)"></div>
+                    <div class="grid"><input type="number" name="happiness" min="0" max="100" placeholder="Позитивность (0–100)"><input type="url" name="url" placeholder="Ссылка на песню"></div>
+                    <label>Жанры <select name="genre_ids" multiple size="4">{% for genre in genres %}<option value="{{ genre.id }}">{{ genre.name }}</option>{% endfor %}</select></label>
+                    <label>Языки <select name="language_ids" multiple size="4">{% for language in languages %}<option value="{{ language.id }}">{{ language.name }}</option>{% endfor %}</select></label>
+                </details>
+                <button>Добавить песню</button>
+            </form>
+            {% else %}<p>Сначала добавьте страну.</p>{% endif %}
+        </article>
+    </section>
+
+    <article>
+        <h2>Добавленные песни</h2>
+        <div style="overflow-x:auto"><table><thead><tr><th>Песня</th><th>Исполнитель</th><th>Страна</th><th>Мероприятие</th><th></th></tr></thead><tbody>
+        {% for song in songs %}<tr><td>{{ song.name }} ({{ song.year }})</td><td>{{ song.artist }}</td><td>{{ song.country.name }}</td><td>{{ song.event.name ~ ' ' ~ song.event.year if song.event else '—' }}</td><td><form method="post" action="/admin/songs/{{ song.id }}/delete"><button class="outline contrast delete" onclick="return confirm('Удалить песню и все её оценки?')">Удалить</button></form></td></tr>{% else %}<tr><td colspan="5">Пока нет песен</td></tr>{% endfor %}
+        </tbody></table></div>
+    </article>
+</main>
+</body>
+</html>

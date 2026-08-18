@@ -148,8 +148,11 @@
     <header>
         <h1>🎵 Еврокомиссия</h1>
         <div>
+            {% if current_user %}
             <span>Вы вошли как <strong>{{ current_user.username }}</strong></span>
             <form method="post" action="/logout"><button type="submit" class="secondary outline">Выйти</button></form>
+            {% else %}<span>Гостевой режим</span><a href="/login" role="button" class="secondary outline">Войти</a>{% endif %}
+            <a href="/admin" role="button" class="secondary outline">Администрирование</a>
         </div>
     </header>
     <p><small>Кто найдет больше багов, тому дадим эксклюзивный смайлик в имя</small></p>
@@ -175,11 +178,11 @@
             </tr>
             <tr>
                 {% for user in users %}
-                <th colspan="2" {% if user.id == current_user.id %}class="current-user-column"{% endif %}>{{ user.username }}</th>
+                <th colspan="2" {% if current_user and user.id == current_user.id %}class="current-user-column"{% endif %}>{{ user.username }}</th>
                 {% endfor %}
                 <th rowspan="2" class="avg-cell" style="width: 80px;">Средняя</th>
                 {% for user in users %}
-                <th colspan="2" {% if user.id == current_user.id %}class="current-user-column"{% endif %}>{{ user.username }}</th>
+                <th colspan="2" {% if current_user and user.id == current_user.id %}class="current-user-column"{% endif %}>{{ user.username }}</th>
                 {% endfor %}
                 <th rowspan="2" class="avg-cell" style="width: 80px;">Средняя</th>
             </tr>
@@ -207,7 +210,7 @@
                 {% for user in users %}
                 {% set op = opinions_map.get((song.id, user.id, 'FIRST')) %}
                 {% if op %}{% set first.total = first.total + op.score %}{% set first.count = first.count + 1 %}{% endif %}
-                {% if user.id == current_user.id %}
+                {% if current_user and user.id == current_user.id %}
                 <td class="current-user-column"><div class="editable-control">
                     <select form="first-{{ song.id }}" name="score">
                         {% for value in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
@@ -230,7 +233,7 @@
                 {% for user in users %}
                 {% set op = opinions_map.get((song.id, user.id, 'FINAL')) %}
                 {% if op %}{% set final.total = final.total + op.score %}{% set final.count = final.count + 1 %}{% endif %}
-                {% if user.id == current_user.id %}
+                {% if current_user and user.id == current_user.id %}
                 <td class="current-user-column"><div class="editable-control">
                     <select form="final-{{ song.id }}" name="score">
                         {% for value in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
