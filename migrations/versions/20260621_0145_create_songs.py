@@ -18,10 +18,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    # The enum is created explicitly below.  Disable automatic creation while
-    # creating the table, otherwise PostgreSQL receives CREATE TYPE twice.
-    vocal = postgresql.ENUM("male", "female", "mix", name="vocal", create_type=False)
+    # Create the shared enum once, if necessary.  ``op.create_table`` also
+    # invokes an enum DDL event, so suppress that second CREATE TYPE below.
+    vocal = postgresql.ENUM("male", "female", "mix", name="vocal")
     vocal.create(op.get_bind(), checkfirst=True)
+    vocal._create_events = False
 
     op.create_table(
         "genres",
