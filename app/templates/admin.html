@@ -30,9 +30,9 @@
     <article>
         <h2>Создать пользователя</h2>
         <form method="post" action="/admin/users" class="grid compact">
-            <input name="username" minlength="3" maxlength="50" pattern="[A-Za-z0-9_-]+" placeholder="Логин" required>
+            <input name="username" minlength="3" maxlength="50" placeholder="Имя" required>
             <input type="email" name="email" placeholder="Электронная почта" required>
-            <input type="password" name="password" minlength="8" maxlength="72" placeholder="Пароль" required>
+            <input type="password" name="password" minlength="3" maxlength="72" placeholder="Пароль" required>
             <label><input type="checkbox" name="is_admin"> Администратор</label>
             <button>Создать пользователя</button>
         </form>
