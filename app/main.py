@@ -163,12 +163,13 @@ def admin_page(request: Request, session: Session = Depends(get_session)):
     events = session.scalars(select(models.Event).options(selectinload(models.Event.host)).order_by(models.Event.year.desc())).all()
     genres = session.scalars(select(models.Genre).order_by(models.Genre.name)).all()
     languages = session.scalars(select(models.Language).order_by(models.Language.name)).all()
+    users = session.scalars(select(models.User).order_by(models.User.username)).all()
     songs = session.scalars(
         select(models.Song).options(selectinload(models.Song.country), selectinload(models.Song.event)).order_by(models.Song.year.desc(), models.Song.name)
     ).all()
     return templates.TemplateResponse(request, "admin.html", {
         "current_user": current_user, "message": message, "countries": countries,
-        "events": events, "genres": genres, "languages": languages, "songs": songs,
+        "events": events, "genres": genres, "languages": languages, "songs": songs, "users": users,
         "vocals": list(models.Vocal),
     })
 
@@ -295,6 +296,55 @@ def admin_create_user_from_page(
     except (HTTPException, ValueError, IntegrityError):
         session.rollback()
         set_admin_message(request, "Не удалось создать пользователя. Проверьте уникальность логина и почты.", "error")
+    return admin_redirect(request)
+
+
+def is_last_active_admin(user: models.User, session: Session) -> bool:
+    """Не позволяет оставить систему без администратора."""
+    if not (user.is_admin and user.is_active):
+        return False
+    active_admins = session.scalars(
+        select(models.User).where(models.User.is_admin.is_(True), models.User.is_active.is_(True))
+    ).all()
+    return len(active_admins) <= 1
+
+
+@app.post("/admin/users/{user_id}/update")
+def admin_update_user(
+    request: Request,
+    user_id: int,
+    is_admin: bool = Form(default=False),
+    is_active: bool = Form(default=False),
+    session: Session = Depends(get_session),
+):
+    if not can_manage_admin(request, session):
+        require_session_admin(request, session)
+    user = session.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+    if is_last_active_admin(user, session) and (not is_admin or not is_active):
+        set_admin_message(request, "Нельзя снять права или отключить последнего активного администратора.", "error")
+        return admin_redirect(request)
+    user.is_admin = is_admin
+    user.is_active = is_active
+    session.commit()
+    set_admin_message(request, "Права пользователя обновлены.")
+    return admin_redirect(request)
+
+
+@app.post("/admin/users/{user_id}/delete")
+def admin_delete_user(request: Request, user_id: int, session: Session = Depends(get_session)):
+    if not can_manage_admin(request, session):
+        require_session_admin(request, session)
+    user = session.get(models.User, user_id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+    if is_last_active_admin(user, session):
+        set_admin_message(request, "Нельзя удалить последнего активного администратора.", "error")
+        return admin_redirect(request)
+    session.delete(user)
+    session.commit()
+    set_admin_message(request, "Пользователь удалён.")
     return admin_redirect(request)
 
 
