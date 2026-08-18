@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 revision: str = "20260621_0125"
 down_revision: str | None = None
@@ -17,8 +18,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    stage = sa.Enum("FIRST", "FINAL", name="stage")
+    # Create the shared enum once, if necessary.  ``op.create_table`` also
+    # invokes an enum DDL event, so suppress that second CREATE TYPE below.
+    stage = postgresql.ENUM("FIRST", "FINAL", name="stage")
     stage.create(op.get_bind(), checkfirst=True)
+    stage._create_events = False
 
     op.create_table(
         "opinions",
