@@ -154,7 +154,7 @@ def read_root(
 
 
 @app.get("/admin", response_class=HTMLResponse)
-def admin_page(request: Request, session: Session = Depends(get_session)):
+def admin_page(request: Request, edit: str | None = None, session: Session = Depends(get_session)):
     current_user = get_current_user(request, session)
     if not can_manage_admin(request, session):
         require_session_admin(request, session)
@@ -167,10 +167,17 @@ def admin_page(request: Request, session: Session = Depends(get_session)):
     songs = session.scalars(
         select(models.Song).options(selectinload(models.Song.country), selectinload(models.Song.event)).order_by(models.Song.year.desc(), models.Song.name)
     ).all()
+    song_genres = {}
+    for link in session.scalars(select(models.SongGenre)).all():
+        song_genres.setdefault(link.song_id, set()).add(link.genre_id)
+    song_languages = {}
+    for link in session.scalars(select(models.SongLanguage)).all():
+        song_languages.setdefault(link.song_id, set()).add(link.language_id)
     return templates.TemplateResponse(request, "admin.html", {
         "current_user": current_user, "message": message, "countries": countries,
         "events": events, "genres": genres, "languages": languages, "songs": songs, "users": users,
-        "vocals": list(models.Vocal),
+        "vocals": list(models.Vocal), "edit": edit,
+        "song_genres": song_genres, "song_languages": song_languages,
     })
 
 
@@ -358,6 +365,58 @@ def admin_delete_user(request: Request, user_id: int, session: Session = Depends
     session.commit()
     set_admin_message(request, "Пользователь удалён.")
     return admin_redirect(request)
+
+
+@app.post("/admin/{entity}/{item_id}/update")
+def admin_update_item(
+    request: Request, entity: str, item_id: int,
+    name: str | None = Form(default=None), year: int | None = Form(default=None), host_id: int | None = Form(default=None),
+    country_id: int | None = Form(default=None), event_id: int | None = Form(default=None), artist: str | None = Form(default=None),
+    vocal: models.Vocal | None = Form(default=None), bpm: int | None = Form(default=None), key: str | None = Form(default=None),
+    energy: int | None = Form(default=None), danceability: int | None = Form(default=None), happiness: int | None = Form(default=None),
+    url: str | None = Form(default=None), genre_ids: list[int] = Form(default=[]), language_ids: list[int] = Form(default=[]),
+    session: Session = Depends(get_session),
+):
+    if not can_manage_admin(request, session):
+        require_session_admin(request, session)
+    model = {"countries": models.Country, "genres": models.Genre, "languages": models.Language, "events": models.Event, "songs": models.Song}.get(entity)
+    item = session.get(model, item_id) if model else None
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if entity in {"countries", "genres", "languages"}:
+        if not name or not name.strip():
+            set_admin_message(request, "Название не может быть пустым.", "error")
+            return RedirectResponse(f"/admin?edit={entity}", status_code=303)
+        item.name = name.strip()
+    elif entity == "events":
+        if not name or year is None or not host_id or not session.get(models.Country, host_id):
+            set_admin_message(request, "Проверьте поля мероприятия.", "error")
+            return RedirectResponse("/admin?edit=events", status_code=303)
+        item.name, item.year, item.host_id = name.strip(), year, host_id
+    else:
+        metrics = (energy, danceability, happiness)
+        if not name or not artist or not country_id or year is None or vocal is None or not session.get(models.Country, country_id) or any(v is not None and not 0 <= v <= 100 for v in metrics):
+            set_admin_message(request, "Проверьте обязательные поля песни и значения 0–100.", "error")
+            return RedirectResponse("/admin?edit=songs", status_code=303)
+        if event_id is not None and not session.get(models.Event, event_id):
+            set_admin_message(request, "Выбрано несуществующее мероприятие.", "error")
+            return RedirectResponse("/admin?edit=songs", status_code=303)
+        item.country_id, item.event_id, item.year, item.name, item.artist, item.vocal = country_id, event_id, year, name.strip(), artist.strip(), vocal
+        item.bpm, item.key, item.energy, item.danceability, item.happiness = bpm, key.strip() or None if key else None, energy, danceability, happiness
+        item.url = url.strip() or None if url else None
+        session.query(models.SongGenre).filter_by(song_id=item.id).delete()
+        session.query(models.SongLanguage).filter_by(song_id=item.id).delete()
+        for genre_id in set(genre_ids):
+            if session.get(models.Genre, genre_id): session.add(models.SongGenre(song_id=item.id, genre_id=genre_id))
+        for language_id in set(language_ids):
+            if session.get(models.Language, language_id): session.add(models.SongLanguage(song_id=item.id, language_id=language_id))
+    try:
+        session.commit()
+        set_admin_message(request, "Запись обновлена.")
+    except IntegrityError:
+        session.rollback()
+        set_admin_message(request, "Не удалось сохранить: значение должно быть уникальным.", "error")
+    return RedirectResponse(f"/admin?edit={entity}", status_code=303)
 
 
 @app.post("/opinions/save")
