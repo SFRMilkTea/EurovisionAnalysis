@@ -313,6 +313,7 @@ def is_last_active_admin(user: models.User, session: Session) -> bool:
 def admin_update_user(
     request: Request,
     user_id: int,
+    username: str = Form(),
     is_admin: bool = Form(default=False),
     is_active: bool = Form(default=False),
     session: Session = Depends(get_session),
@@ -322,9 +323,20 @@ def admin_update_user(
     user = session.get(models.User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+    username = username.strip()
+    if not 3 <= len(username) <= 50:
+        set_admin_message(request, "Логин должен содержать от 3 до 50 символов.", "error")
+        return admin_redirect(request)
+    same_name_user = session.scalars(
+        select(models.User).where(models.User.username == username, models.User.id != user.id)
+    ).first()
+    if same_name_user:
+        set_admin_message(request, "Этот логин уже занят.", "error")
+        return admin_redirect(request)
     if is_last_active_admin(user, session) and (not is_admin or not is_active):
         set_admin_message(request, "Нельзя снять права или отключить последнего активного администратора.", "error")
         return admin_redirect(request)
+    user.username = username
     user.is_admin = is_admin
     user.is_active = is_active
     session.commit()
