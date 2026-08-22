@@ -1,116 +1,277 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Администрирование — Еврокомиссия</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Администрирование</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
     <style>
-        header { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
-        header nav, header form { margin:0; } header nav { display:flex; gap:.6rem; align-items:center; }
-        .grid { align-items:start; } .compact { margin-bottom:0; }
-        .compact input, .compact select { margin-bottom:.65rem; }
-        .notice { padding:.8rem 1rem; border-radius:var(--pico-border-radius); background:var(--pico-ins-color); }
-        .notice.error { background:var(--pico-del-color); color:var(--pico-primary-inverse); }
-        .list { max-height:17rem; overflow:auto; } .list li { display:flex; justify-content:space-between; align-items:center; gap:.5rem; }
-        .list form { margin:0; } .delete { padding:.2rem .5rem; margin:0; font-size:.8rem; }
-        fieldset { margin-bottom:.75rem; } .wide { grid-column:1 / -1; }
-        .user-table form { margin:0; } .user-table td { vertical-align:middle; }
+        header{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}header nav,form{margin:0}.notice{padding:.8rem;border-radius:var(--pico-border-radius);background:var(--pico-ins-color)}.notice.error{background:var(--pico-del-color);color:#fff}.table-box{overflow:auto;max-height:30rem}.actions{white-space:nowrap}.small{font-size:.8rem;padding:.25rem .55rem;margin:0}td input,td select{margin:0;min-width:7rem}details{margin:.4rem 0}
     </style>
 </head>
 <body>
 <main class="container">
     <header>
-        <div><h1>Администрирование</h1><small>Заполнение базы данных конкурса</small></div>
-        <nav><a href="/" role="button" class="secondary outline">К таблице оценок</a>{% if current_user %}<form method="post" action="/logout"><button class="secondary outline">Выйти</button></form>{% endif %}</nav>
+        <div><h1>Администрирование</h1><small>{% if edit %}Редактирование таблицы{% else %}Просмотр базы данных{% endif
+            %}</small></div>
+        <nav><a href="/admin" role="button" class="secondary outline">К просмотру</a><a href="/" role="button"
+                                                                                        class="secondary outline">К
+            оценкам</a></nav>
     </header>
-
     {% if message %}<p class="notice {{ message.kind }}">{{ message.text }}</p>{% endif %}
-
+    {% if not edit %}<p>В этом режиме данные только просматриваются. Для изменений выберите таблицу.</p>{% for
+    code,title,rows in
+    [('users','Пользователи',users),('countries','Страны',countries),('events','Мероприятия',events),('songs','Песни',songs),('genres','Жанры',genres),('languages','Языки',languages)]
+    %}
     <article>
-        <h2>Создать пользователя</h2>
-        <form method="post" action="/admin/users" class="grid compact">
-            <input name="username" minlength="3" maxlength="50" placeholder="Имя" required>
-            <input type="email" name="email" placeholder="Электронная почта" required>
-            <input type="password" name="password" minlength="3" maxlength="72" placeholder="Пароль" required>
-            <label><input type="checkbox" name="is_admin"> Администратор</label>
-            <button>Создать пользователя</button>
+        <header><h2>{{ title }} <small>({{ rows|length }})</small></h2><a href="/admin?edit={{ code }}" role="button">Редактировать</a>
+        </header>
+        <div class="table-box">
+            <table>
+                <tbody>{% for row in rows[:10] %}
+                <tr>
+                    <td>{{ row.username if code == 'users' else row.name }}</td>
+                    {% if code == 'users' %}
+                    <td>{{ row.email }}</td>
+                    {% elif code == 'songs' %}
+                    <td>{{ row.artist }}</td>
+                    <td>{{ row.year }}</td>
+                    {% elif code == 'events' %}
+                    <td>{{ row.year }}</td>
+                    <td>{{ row.host.name }}</td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td>Нет записей</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if rows|length > 10 %}<small>Показаны первые 10 строк.</small>{% endif %}
+    </article>
+    {% endfor %}
+    {% elif edit in ['countries','genres','languages'] %}{% set rows = countries if edit == 'countries' else (genres if
+    edit == 'genres' else languages) %}
+    <article><h2>{{ {'countries':'Страны','genres':'Жанры','languages':'Языки'}[edit] }}</h2>
+        <form method="post"
+              action="{% if edit == 'countries' %}/admin/countries{% else %}/admin/catalog/{{ edit }}{% endif %}"><input
+                name="name" placeholder="Название" required>
+            <button>Добавить строку</button>
+        </form>
+        <div class="table-box">
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Название</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>{% for row in rows %}
+                <tr>
+                    <form id="row-{{ row.id }}" method="post" action="/admin/{{ edit }}/{{ row.id }}/update">
+                        <td>{{ row.id }}</td>
+                        <td><input name="name" value="{{ row.name }}" required></td>
+                    </form>
+                    <td class="actions">
+                        <button form="row-{{ row.id }}" class="small">Сохранить</button>
+                        <form method="post" action="/admin/{{ edit }}/{{ row.id }}/delete" style="display:inline">
+                            <button class="small outline contrast">Удалить</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+    {% elif edit == 'events' %}
+    <article><h2>Мероприятия</h2>
+        <form method="post" action="/admin/events" class="grid"><input name="name" placeholder="Название"
+                                                                       required><input name="year" type="number"
+                                                                                       placeholder="Год"
+                                                                                       required><select name="host_id">{%
+            for c in countries %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+            {% endfor %}</select>
+            <button>Добавить строку</button>
+        </form>
+        <div class="table-box">
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Название</th>
+                    <th>Год</th>
+                    <th>Хозяин</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>{% for row in events %}
+                <tr>
+                    <form id="event-{{ row.id }}" method="post" action="/admin/events/{{ row.id }}/update">
+                        <td>{{ row.id }}</td>
+                        <td><input name="name" value="{{ row.name }}"></td>
+                        <td><input name="year" type="number" value="{{ row.year }}"></td>
+                        <td><select name="host_id">{% for c in countries %}
+                            <option value="{{ c.id }}" {% if c.id== row.host_id %}selected{% endif %}>{{ c.name }}
+                            </option>
+                            {% endfor %}</select></td>
+                    </form>
+                    <td class="actions">
+                        <button form="event-{{ row.id }}" class="small">Сохранить</button>
+                        <form method="post" action="/admin/events/{{ row.id }}/delete" style="display:inline">
+                            <button class="small outline contrast">Удалить</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </article>
+    {% elif edit == 'users' %}
+    <article><h2>Добавить пользователя</h2>
+        <form method="post" action="/admin/users" class="grid"><input name="username" minlength="3" placeholder="Логин"
+                                                                      required><input type="email" name="email"
+                                                                                      placeholder="Почта"
+                                                                                      required><input type="password"
+                                                                                                      name="password"
+                                                                                                      minlength="3"
+                                                                                                      placeholder="Пароль"
+                                                                                                      required><label><input
+                type="checkbox" name="is_admin"> Администратор</label>
+            <button>Добавить строку</button>
         </form>
     </article>
-
-    <article>
-        <h2>Пользователи</h2>
-        <div style="overflow-x:auto"><table class="user-table">
-            <thead><tr><th>Логин</th><th>Почта</th><th>Администратор</th><th>Активен</th><th>Последний вход</th><th>Действия</th></tr></thead>
-            <tbody>{% for user in users %}
-            <tr>
-                <td><form id="user-{{ user.id }}" method="post" action="/admin/users/{{ user.id }}/update"><input name="username" value="{{ user.username }}" minlength="3" maxlength="50" required aria-label="Логин пользователя"></form></td><td>{{ user.email or '—' }}</td>
-                <td><input form="user-{{ user.id }}" type="checkbox" name="is_admin" {% if user.is_admin %}checked{% endif %} aria-label="Права администратора для {{ user.username }}"></td>
-                <td><input form="user-{{ user.id }}" type="checkbox" name="is_active" {% if user.is_active %}checked{% endif %} aria-label="Активность {{ user.username }}"></td>
-                <td>{{ user.last_login_at.strftime('%d.%m.%Y %H:%M') if user.last_login_at else '—' }}</td>
-                <td><button form="user-{{ user.id }}" class="secondary" type="submit">Сохранить</button> <form method="post" action="/admin/users/{{ user.id }}/delete" style="display:inline"><button class="outline contrast delete" onclick="return confirm('Удалить пользователя и все его оценки?')">Удалить</button></form></td>
-            </tr>
-            {% else %}<tr><td colspan="6">Пользователей пока нет</td></tr>{% endfor %}</tbody>
-        </table></div>
+    <article><h2>Пользователи</h2>
+        <div class="table-box">
+            <table>
+                <thead>
+                <tr>
+                    <th>Логин</th>
+                    <th>Почта</th>
+                    <th>Админ</th>
+                    <th>Активен</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>{% for row in users %}
+                <tr>
+                    <form id="user-{{ row.id }}" method="post" action="/admin/users/{{ row.id }}/update">
+                        <td><input name="username" value="{{ row.username }}" required></td>
+                        <td>{{ row.email }}</td>
+                        <td><input type="checkbox" name="is_admin" {% if row.is_admin %}checked{% endif %}></td>
+                        <td><input type="checkbox" name="is_active" {% if row.is_active %}checked{% endif %}></td>
+                    </form>
+                    <td class="actions">
+                        <button form="user-{{ row.id }}" class="small">Сохранить</button>
+                        <form method="post" action="/admin/users/{{ row.id }}/delete" style="display:inline">
+                            <button class="small outline contrast">Удалить</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </article>
-
-    <section class="grid">
-        <article>
-            <h3>Страна</h3>
-            <form class="compact" method="post" action="/admin/countries"><input name="name" placeholder="Например, Швеция" required><button>Добавить</button></form>
-            <ul class="list">{% for country in countries %}<li>{{ country.name }}<form method="post" action="/admin/countries/{{ country.id }}/delete"><button class="outline contrast delete" onclick="return confirm('Удалить страну и связанные данные?')">Удалить</button></form></li>{% else %}<li>Пока нет стран</li>{% endfor %}</ul>
-        </article>
-        <article>
-            <h3>Жанр</h3>
-            <form class="compact" method="post" action="/admin/catalog/genres"><input name="name" placeholder="Например, Поп" required><button>Добавить</button></form>
-            <ul class="list">{% for genre in genres %}<li>{{ genre.name }}<form method="post" action="/admin/genres/{{ genre.id }}/delete"><button class="outline contrast delete">Удалить</button></form></li>{% else %}<li>Пока нет жанров</li>{% endfor %}</ul>
-        </article>
-        <article>
-            <h3>Язык</h3>
-            <form class="compact" method="post" action="/admin/catalog/languages"><input name="name" placeholder="Например, Английский" required><button>Добавить</button></form>
-            <ul class="list">{% for language in languages %}<li>{{ language.name }}<form method="post" action="/admin/languages/{{ language.id }}/delete"><button class="outline contrast delete">Удалить</button></form></li>{% else %}<li>Пока нет языков</li>{% endfor %}</ul>
-        </article>
-    </section>
-
-    <section class="grid">
-        <article>
-            <h2>Мероприятие</h2>
-            {% if countries %}
-            <form method="post" action="/admin/events">
-                <input name="name" placeholder="Название конкурса" required>
-                <input type="number" name="year" min="1956" max="2100" placeholder="Год" required>
-                <select name="host_id" required>{% for country in countries %}<option value="{{ country.id }}">{{ country.name }}</option>{% endfor %}</select>
-                <button>Добавить мероприятие</button>
-            </form>
-            {% else %}<p>Сначала добавьте хотя бы одну страну.</p>{% endif %}
-            <ul class="list">{% for event in events %}<li>{{ event.name }} ({{ event.year }}, {{ event.host.name }})<form method="post" action="/admin/events/{{ event.id }}/delete"><button class="outline contrast delete" onclick="return confirm('Удалить мероприятие? Песни останутся без мероприятия.')">Удалить</button></form></li>{% else %}<li>Пока нет мероприятий</li>{% endfor %}</ul>
-        </article>
-        <article>
-            <h2>Песня</h2>
-            {% if countries %}
-            <form method="post" action="/admin/songs">
-                <div class="grid"><input name="name" placeholder="Название песни" required><input name="artist" placeholder="Исполнитель" required></div>
-                <div class="grid"><select name="country_id" required>{% for country in countries %}<option value="{{ country.id }}">{{ country.name }}</option>{% endfor %}</select><select name="event_id"><option value="">Без мероприятия</option>{% for event in events %}<option value="{{ event.id }}">{{ event.name }} {{ event.year }}</option>{% endfor %}</select></div>
-                <div class="grid"><input type="number" name="year" min="1956" max="2100" placeholder="Год" required><select name="vocal">{% for vocal in vocals %}<option value="{{ vocal.value }}">{{ vocal.value }}</option>{% endfor %}</select></div>
-                <details><summary>Музыкальные характеристики и связи</summary>
-                    <div class="grid"><input type="number" name="bpm" min="0" placeholder="BPM"><input name="key" maxlength="16" placeholder="Тональность"></div>
-                    <div class="grid"><input type="number" name="energy" min="0" max="100" placeholder="Энергичность (0–100)"><input type="number" name="danceability" min="0" max="100" placeholder="Танцевальность (0–100)"></div>
-                    <div class="grid"><input type="number" name="happiness" min="0" max="100" placeholder="Позитивность (0–100)"><input type="url" name="url" placeholder="Ссылка на песню"></div>
-                    <label>Жанры <select name="genre_ids" multiple size="4">{% for genre in genres %}<option value="{{ genre.id }}">{{ genre.name }}</option>{% endfor %}</select></label>
-                    <label>Языки <select name="language_ids" multiple size="4">{% for language in languages %}<option value="{{ language.id }}">{{ language.name }}</option>{% endfor %}</select></label>
-                </details>
-                <button>Добавить песню</button>
-            </form>
-            {% else %}<p>Сначала добавьте страну.</p>{% endif %}
-        </article>
-    </section>
-
-    <article>
-        <h2>Добавленные песни</h2>
-        <div style="overflow-x:auto"><table><thead><tr><th>Песня</th><th>Исполнитель</th><th>Страна</th><th>Мероприятие</th><th></th></tr></thead><tbody>
-        {% for song in songs %}<tr><td>{{ song.name }} ({{ song.year }})</td><td>{{ song.artist }}</td><td>{{ song.country.name }}</td><td>{{ song.event.name ~ ' ' ~ song.event.year if song.event else '—' }}</td><td><form method="post" action="/admin/songs/{{ song.id }}/delete"><button class="outline contrast delete" onclick="return confirm('Удалить песню и все её оценки?')">Удалить</button></form></td></tr>{% else %}<tr><td colspan="5">Пока нет песен</td></tr>{% endfor %}
-        </tbody></table></div>
+    {% elif edit == 'songs' %}
+    <article><h2>Песни</h2>
+        <div class="table-box">
+            <table>
+                <thead>
+                <tr>
+                    <th>Название и артист</th>
+                    <th>Год и вокал</th>
+                    <th>Страна/мероприятие</th>
+                    <th>Все характеристики</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>{% for row in songs %}
+                <tr>
+                    <form id="song-{{ row.id }}" method="post" action="/admin/songs/{{ row.id }}/update">
+                        <td><input name="name" value="{{ row.name }}"><input name="artist" value="{{ row.artist }}">
+                        </td>
+                        <td><input name="year" type="number" value="{{ row.year }}"><select name="vocal">{% for v in
+                            vocals %}
+                            <option value="{{ v.value }}" {% if v== row.vocal %}selected{% endif %}>{{ v.value }}
+                            </option>
+                            {% endfor %}</select></td>
+                        <td><select name="country_id">{% for c in countries %}
+                            <option value="{{ c.id }}" {% if c.id== row.country_id %}selected{% endif %}>{{ c.name }}
+                            </option>
+                            {% endfor %}</select><select name="event_id">
+                            <option value="">Без мероприятия</option>
+                            {% for e in events %}
+                            <option value="{{ e.id }}" {% if e.id== row.event_id %}selected{% endif %}>{{ e.name }} {{
+                                e.year }}
+                            </option>
+                            {% endfor %}</select></td>
+                        <td><input name="bpm" type="number" value="{{ row.bpm or '' }}" placeholder="BPM"><input
+                                name="key" value="{{ row.key or '' }}" placeholder="Тональность"><input name="energy"
+                                                                                                        type="number"
+                                                                                                        min="0"
+                                                                                                        max="100"
+                                                                                                        value="{{ row.energy or '' }}"
+                                                                                                        placeholder="Энергия"><input
+                                name="danceability" type="number" min="0" max="100" value="{{ row.danceability or '' }}"
+                                placeholder="Танцевальность"><input name="happiness" type="number" min="0" max="100"
+                                                                    value="{{ row.happiness or '' }}"
+                                                                    placeholder="Позитивность"><input name="url"
+                                                                                                      value="{{ row.url or '' }}"
+                                                                                                      placeholder="Ссылка"><select
+                                name="genre_ids" multiple>{% for g in genres %}
+                            <option value="{{ g.id }}" {% if g.id in song_genres.get(row.id, []) %}selected{% endif %}>
+                                {{ g.name }}
+                            </option>
+                            {% endfor %}</select><select name="language_ids" multiple>{% for l in languages %}
+                            <option value="{{ l.id }}" {% if l.id in song_languages.get(row.id, []) %}selected{% endif
+                                    %}>{{ l.name }}
+                            </option>
+                            {% endfor %}</select></td>
+                    </form>
+                    <td class="actions">
+                        <button form="song-{{ row.id }}" class="small">Сохранить</button>
+                        <form method="post" action="/admin/songs/{{ row.id }}/delete">
+                            <button class="small outline contrast">Удалить</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </article>
+    <article><h2>Добавить песню</h2>
+        <form method="post" action="/admin/songs" class="grid"><input name="name" placeholder="Название" required><input
+                name="artist" placeholder="Исполнитель" required><input name="year" type="number" placeholder="Год"
+                                                                        required><select name="vocal">{% for v in vocals
+            %}
+            <option value="{{ v.value }}">{{ v.value }}</option>
+            {% endfor %}</select><select name="country_id">{% for c in countries %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+            {% endfor %}</select><select name="event_id">
+            <option value="">Без мероприятия</option>
+            {% for e in events %}
+            <option value="{{ e.id }}">{{ e.name }}</option>
+            {% endfor %}</select><input name="bpm" type="number" placeholder="BPM"><input name="key"
+                                                                                          placeholder="Тональность"><input
+                name="energy" type="number" placeholder="Энергия"><input name="danceability" type="number"
+                                                                         placeholder="Танцевальность"><input
+                name="happiness" type="number" placeholder="Позитивность"><input name="url" placeholder="Ссылка"><select
+                name="genre_ids" multiple>{% for g in genres %}
+            <option value="{{ g.id }}">{{ g.name }}</option>
+            {% endfor %}</select><select name="language_ids" multiple>{% for l in languages %}
+            <option value="{{ l.id }}">{{ l.name }}</option>
+            {% endfor %}</select>
+            <button>Добавить строку</button>
+        </form>
+    </article>
+    {% endif %}
 </main>
 </body>
 </html>
