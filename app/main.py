@@ -120,11 +120,11 @@ def read_root(
     #     return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
 
     events = session.scalars(
-        select(models.Event).order_by(models.Event.year.desc(), models.Event.name)
+        select(models.Event).order_by(models.Event.is_current.desc(), models.Event.year.desc(), models.Event.name)
     ).all()
     selected_event = next((event for event in events if event.id == event_id), None)
     if selected_event is None:
-        selected_event = next((event for event in events if event.id == 2), None)
+        selected_event = next((event for event in events if event.is_current), None)
     if selected_event is None and events:
         selected_event = events[0]
 
@@ -210,6 +210,28 @@ def admin_create_event(request: Request, name: str = Form(), year: int = Form(),
         session.commit()
         set_admin_message(request, "Мероприятие добавлено.")
     return admin_redirect(request)
+
+
+@app.post("/admin/events/{event_id}/settings")
+def admin_update_event_settings(
+    request: Request, event_id: int, is_current: bool = Form(default=False),
+    first_stage_open: bool = Form(default=False), final_stage_open: bool = Form(default=False),
+    session: Session = Depends(get_session),
+):
+    if not can_manage_admin(request, session):
+        require_session_admin(request, session)
+    event = session.get(models.Event, event_id)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    if is_current:
+        for other_event in session.scalars(select(models.Event).where(models.Event.id != event.id, models.Event.is_current.is_(True))):
+            other_event.is_current = False
+    event.is_current = is_current
+    event.first_stage_open = first_stage_open
+    event.final_stage_open = final_stage_open
+    session.commit()
+    set_admin_message(request, "Настройки мероприятия сохранены.")
+    return RedirectResponse("/admin?edit=events", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.post("/admin/catalog/{catalog_name}")
@@ -442,6 +464,9 @@ def save_opinion(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Песня не относится к мероприятию",
         )
+    event = song.event
+    if event is None or (stage == models.Stage.FIRST and not event.first_stage_open) or (stage == models.Stage.FINAL and not event.final_stage_open):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Редактирование оценок этого этапа закрыто")
 
     opinion = session.scalars(
         select(models.Opinion).where(
