@@ -14,7 +14,7 @@ from app import models
 from app.config import settings
 from app.database import get_session
 from app.deps import get_current_admin
-from app.schemas import UserCreate, UserRead, UserRegister
+from app.schemas import UserCreate, UserRead
 from app.security import create_access_token, verify_password
 from app.users import create_user
 
@@ -47,11 +47,6 @@ def require_session_admin(request: Request, session: Session) -> models.User:
     return user
 
 
-def can_manage_admin(request: Request, session: Session) -> bool:
-    """Временно оставляет панель открытой для первоначального создания администратора."""
-    return True
-
-
 def set_admin_message(request: Request, text: str, kind: str = "success") -> None:
     request.session["admin_message"] = {"text": text, "kind": kind}
 
@@ -69,10 +64,10 @@ def login_page(request: Request):
 
 @app.post("/login")
 def login(
-    request: Request,
-    email: str = Form(),
-    password: str = Form(),
-    session: Session = Depends(get_session),
+        request: Request,
+        email: str = Form(),
+        password: str = Form(),
+        session: Session = Depends(get_session),
 ):
     user = session.scalars(select(models.User).where(models.User.email == email)).first()
     if not user or not user.is_active or not verify_password(password, user.password_hash):
@@ -111,13 +106,13 @@ def logout(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 def read_root(
-    request: Request,
-    event_id: int | None = None,
-    session: Session = Depends(get_session),
+        request: Request,
+        event_id: int | None = None,
+        session: Session = Depends(get_session),
 ):
     current_user = get_current_user(request, session)
-    # if current_user is None:
-    #     return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+    if current_user is None:
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
 
     events = session.scalars(
         select(models.Event).order_by(models.Event.is_current.desc(), models.Event.year.desc(), models.Event.name)
@@ -156,16 +151,19 @@ def read_root(
 @app.get("/admin", response_class=HTMLResponse)
 def admin_page(request: Request, edit: str | None = None, session: Session = Depends(get_session)):
     current_user = get_current_user(request, session)
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
+    if current_user is None:
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+    require_session_admin(request, session)
     message = request.session.pop("admin_message", None)
     countries = session.scalars(select(models.Country).order_by(models.Country.name)).all()
-    events = session.scalars(select(models.Event).options(selectinload(models.Event.host)).order_by(models.Event.year.desc())).all()
+    events = session.scalars(
+        select(models.Event).options(selectinload(models.Event.host)).order_by(models.Event.year.desc())).all()
     genres = session.scalars(select(models.Genre).order_by(models.Genre.name)).all()
     languages = session.scalars(select(models.Language).order_by(models.Language.name)).all()
     users = session.scalars(select(models.User).order_by(models.User.username)).all()
     songs = session.scalars(
-        select(models.Song).options(selectinload(models.Song.country), selectinload(models.Song.event)).order_by(models.Song.year.desc(), models.Song.name)
+        select(models.Song).options(selectinload(models.Song.country), selectinload(models.Song.event)).order_by(
+            models.Song.year.desc(), models.Song.name)
     ).all()
     song_genres = {}
     for link in session.scalars(select(models.SongGenre)).all():
@@ -183,8 +181,7 @@ def admin_page(request: Request, edit: str | None = None, session: Session = Dep
 
 @app.post("/admin/countries")
 def admin_create_country(request: Request, name: str = Form(), session: Session = Depends(get_session)):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
+    require_session_admin(request, session)
     name = name.strip()
     if not name:
         set_admin_message(request, "Название страны не может быть пустым.", "error")
@@ -200,9 +197,9 @@ def admin_create_country(request: Request, name: str = Form(), session: Session 
 
 
 @app.post("/admin/events")
-def admin_create_event(request: Request, name: str = Form(), year: int = Form(), host_id: int = Form(), session: Session = Depends(get_session)):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
+def admin_create_event(request: Request, name: str = Form(), year: int = Form(), host_id: int = Form(),
+                       session: Session = Depends(get_session)):
+    require_session_admin(request, session)
     if not name.strip() or not session.get(models.Country, host_id):
         set_admin_message(request, "Укажите название мероприятия и страну-хозяйку.", "error")
     else:
@@ -214,17 +211,17 @@ def admin_create_event(request: Request, name: str = Form(), year: int = Form(),
 
 @app.post("/admin/events/{event_id}/settings")
 def admin_update_event_settings(
-    request: Request, event_id: int, is_current: bool = Form(default=False),
-    first_stage_open: bool = Form(default=False), final_stage_open: bool = Form(default=False),
-    session: Session = Depends(get_session),
+        request: Request, event_id: int, is_current: bool = Form(default=False),
+        first_stage_open: bool = Form(default=False), final_stage_open: bool = Form(default=False),
+        session: Session = Depends(get_session),
 ):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
+    require_session_admin(request, session)
     event = session.get(models.Event, event_id)
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if is_current:
-        for other_event in session.scalars(select(models.Event).where(models.Event.id != event.id, models.Event.is_current.is_(True))):
+        for other_event in session.scalars(
+                select(models.Event).where(models.Event.id != event.id, models.Event.is_current.is_(True))):
             other_event.is_current = False
     event.is_current = is_current
     event.first_stage_open = first_stage_open
@@ -235,9 +232,9 @@ def admin_update_event_settings(
 
 
 @app.post("/admin/catalog/{catalog_name}")
-def admin_create_catalog_item(request: Request, catalog_name: str, name: str = Form(), session: Session = Depends(get_session)):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
+def admin_create_catalog_item(request: Request, catalog_name: str, name: str = Form(),
+                              session: Session = Depends(get_session)):
+    require_session_admin(request, session)
     model = {"genres": models.Genre, "languages": models.Language}.get(catalog_name)
     if model is None:
         raise HTTPException(status_code=404)
@@ -257,14 +254,16 @@ def admin_create_catalog_item(request: Request, catalog_name: str, name: str = F
 
 @app.post("/admin/songs")
 def admin_create_song(
-    request: Request, country_id: int = Form(), event_id: int | None = Form(default=None),
-    year: int = Form(), name: str = Form(), artist: str = Form(), vocal: models.Vocal = Form(),
-    bpm: int | None = Form(default=None), key: str | None = Form(default=None), energy: int | None = Form(default=None),
-    danceability: int | None = Form(default=None), happiness: int | None = Form(default=None), url: str | None = Form(default=None),
-    genre_ids: list[int] = Form(default=[]), language_ids: list[int] = Form(default=[]), session: Session = Depends(get_session),
+        request: Request, country_id: int = Form(), event_id: int | None = Form(default=None),
+        year: int = Form(), name: str = Form(), artist: str = Form(), vocal: models.Vocal = Form(),
+        bpm: int | None = Form(default=None), key: str | None = Form(default=None),
+        energy: int | None = Form(default=None),
+        danceability: int | None = Form(default=None), happiness: int | None = Form(default=None),
+        url: str | None = Form(default=None),
+        genre_ids: list[int] = Form(default=[]), language_ids: list[int] = Form(default=[]),
+        session: Session = Depends(get_session),
 ):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
+    require_session_admin(request, session)
     valid_metrics = all(value is None or 0 <= value <= 100 for value in (energy, danceability, happiness))
     if not name.strip() or not artist.strip() or not session.get(models.Country, country_id) or not valid_metrics:
         set_admin_message(request, "Проверьте обязательные поля и значения характеристик (0–100).", "error")
@@ -272,7 +271,8 @@ def admin_create_song(
     if event_id is not None and not session.get(models.Event, event_id):
         set_admin_message(request, "Выбрано несуществующее мероприятие.", "error")
         return admin_redirect(request)
-    song = models.Song(country_id=country_id, event_id=event_id, year=year, name=name.strip(), artist=artist.strip(), vocal=vocal,
+    song = models.Song(country_id=country_id, event_id=event_id, year=year, name=name.strip(), artist=artist.strip(),
+                       vocal=vocal,
                        bpm=bpm, key=key.strip() or None if key else None, energy=energy, danceability=danceability,
                        happiness=happiness, url=url.strip() or None if url else None)
     session.add(song)
@@ -290,9 +290,9 @@ def admin_create_song(
 
 @app.post("/admin/{entity}/{item_id}/delete")
 def admin_delete_item(request: Request, entity: str, item_id: int, session: Session = Depends(get_session)):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
-    model = {"countries": models.Country, "events": models.Event, "genres": models.Genre, "languages": models.Language, "songs": models.Song}.get(entity)
+    require_session_admin(request, session)
+    model = {"countries": models.Country, "events": models.Event, "genres": models.Genre, "languages": models.Language,
+             "songs": models.Song}.get(entity)
     if model is None:
         raise HTTPException(status_code=404)
     item = session.get(model, item_id)
@@ -310,17 +310,17 @@ def admin_delete_item(request: Request, entity: str, item_id: int, session: Sess
 
 @app.post("/admin/users")
 def admin_create_user_from_page(
-    request: Request,
-    username: str = Form(),
-    email: str = Form(),
-    password: str = Form(),
-    is_admin: bool = Form(default=False),
-    session: Session = Depends(get_session),
+        request: Request,
+        username: str = Form(),
+        email: str = Form(),
+        password: str = Form(),
+        is_admin: bool = Form(default=False),
+        session: Session = Depends(get_session),
 ):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
+    require_session_admin(request, session)
     try:
-        create_user(session, UserCreate(username=username, email=email, password=password, is_admin=is_admin), is_admin=is_admin)
+        create_user(session, UserCreate(username=username, email=email, password=password, is_admin=is_admin),
+                    is_admin=is_admin)
         set_admin_message(request, "Пользователь создан.")
     except (HTTPException, ValueError, IntegrityError):
         session.rollback()
@@ -340,15 +340,14 @@ def is_last_active_admin(user: models.User, session: Session) -> bool:
 
 @app.post("/admin/users/{user_id}/update")
 def admin_update_user(
-    request: Request,
-    user_id: int,
-    username: str = Form(),
-    is_admin: bool = Form(default=False),
-    is_active: bool = Form(default=False),
-    session: Session = Depends(get_session),
+        request: Request,
+        user_id: int,
+        username: str = Form(),
+        is_admin: bool = Form(default=False),
+        is_active: bool = Form(default=False),
+        session: Session = Depends(get_session),
 ):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
+    require_session_admin(request, session)
     user = session.get(models.User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
@@ -375,8 +374,7 @@ def admin_update_user(
 
 @app.post("/admin/users/{user_id}/delete")
 def admin_delete_user(request: Request, user_id: int, session: Session = Depends(get_session)):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
+    require_session_admin(request, session)
     user = session.get(models.User, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
@@ -391,17 +389,22 @@ def admin_delete_user(request: Request, user_id: int, session: Session = Depends
 
 @app.post("/admin/{entity}/{item_id}/update")
 def admin_update_item(
-    request: Request, entity: str, item_id: int,
-    name: str | None = Form(default=None), year: int | None = Form(default=None), host_id: int | None = Form(default=None),
-    country_id: int | None = Form(default=None), event_id: int | None = Form(default=None), artist: str | None = Form(default=None),
-    vocal: models.Vocal | None = Form(default=None), bpm: int | None = Form(default=None), key: str | None = Form(default=None),
-    energy: int | None = Form(default=None), danceability: int | None = Form(default=None), happiness: int | None = Form(default=None),
-    url: str | None = Form(default=None), genre_ids: list[int] = Form(default=[]), language_ids: list[int] = Form(default=[]),
-    session: Session = Depends(get_session),
+        request: Request, entity: str, item_id: int,
+        name: str | None = Form(default=None), year: int | None = Form(default=None),
+        host_id: int | None = Form(default=None),
+        country_id: int | None = Form(default=None), event_id: int | None = Form(default=None),
+        artist: str | None = Form(default=None),
+        vocal: models.Vocal | None = Form(default=None), bpm: int | None = Form(default=None),
+        key: str | None = Form(default=None),
+        energy: int | None = Form(default=None), danceability: int | None = Form(default=None),
+        happiness: int | None = Form(default=None),
+        url: str | None = Form(default=None), genre_ids: list[int] = Form(default=[]),
+        language_ids: list[int] = Form(default=[]),
+        session: Session = Depends(get_session),
 ):
-    if not can_manage_admin(request, session):
-        require_session_admin(request, session)
-    model = {"countries": models.Country, "genres": models.Genre, "languages": models.Language, "events": models.Event, "songs": models.Song}.get(entity)
+    require_session_admin(request, session)
+    model = {"countries": models.Country, "genres": models.Genre, "languages": models.Language, "events": models.Event,
+             "songs": models.Song}.get(entity)
     item = session.get(model, item_id) if model else None
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
@@ -417,7 +420,9 @@ def admin_update_item(
         item.name, item.year, item.host_id = name.strip(), year, host_id
     else:
         metrics = (energy, danceability, happiness)
-        if not name or not artist or not country_id or year is None or vocal is None or not session.get(models.Country, country_id) or any(v is not None and not 0 <= v <= 100 for v in metrics):
+        if not name or not artist or not country_id or year is None or vocal is None or not session.get(models.Country,
+                                                                                                        country_id) or any(
+            v is not None and not 0 <= v <= 100 for v in metrics):
             set_admin_message(request, "Проверьте обязательные поля песни и значения 0–100.", "error")
             return RedirectResponse("/admin?edit=songs", status_code=303)
         if event_id is not None and not session.get(models.Event, event_id):
@@ -431,7 +436,8 @@ def admin_update_item(
         for genre_id in set(genre_ids):
             if session.get(models.Genre, genre_id): session.add(models.SongGenre(song_id=item.id, genre_id=genre_id))
         for language_id in set(language_ids):
-            if session.get(models.Language, language_id): session.add(models.SongLanguage(song_id=item.id, language_id=language_id))
+            if session.get(models.Language, language_id): session.add(
+                models.SongLanguage(song_id=item.id, language_id=language_id))
     try:
         session.commit()
         set_admin_message(request, "Запись обновлена.")
@@ -443,13 +449,13 @@ def admin_update_item(
 
 @app.post("/opinions/save")
 def save_opinion(
-    request: Request,
-    song_id: int = Form(),
-    event_id: int | None = Form(default=None),
-    stage: models.Stage = Form(),
-    score: int = Form(),
-    note: str | None = Form(default=None),
-    session: Session = Depends(get_session),
+        request: Request,
+        song_id: int = Form(),
+        event_id: int | None = Form(default=None),
+        stage: models.Stage = Form(),
+        score: int = Form(),
+        note: str | None = Form(default=None),
+        session: Session = Depends(get_session),
 ):
     current_user = get_current_user(request, session)
     if current_user is None:
@@ -465,7 +471,8 @@ def save_opinion(
             detail="Песня не относится к мероприятию",
         )
     event = song.event
-    if event is None or (stage == models.Stage.FIRST and not event.first_stage_open) or (stage == models.Stage.FINAL and not event.final_stage_open):
+    if event is None or (stage == models.Stage.FIRST and not event.first_stage_open) or (
+            stage == models.Stage.FINAL and not event.final_stage_open):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Редактирование оценок этого этапа закрыто")
 
     opinion = session.scalars(
@@ -484,15 +491,10 @@ def save_opinion(
     return {"ok": True}
 
 
-@app.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def register_user(user_in: UserRegister, session: Session = Depends(get_session)):
-    return create_user(session, user_in, is_admin=False)
-
-
 @app.post("/admin/users/", response_model=UserRead)
 def admin_create_user(
-    user_in: UserCreate,
-    session: Session = Depends(get_session),
-    current_admin: models.User = Depends(get_current_admin),
+        user_in: UserCreate,
+        session: Session = Depends(get_session),
+        current_admin: models.User = Depends(get_current_admin),
 ):
     return create_user(session, user_in, is_admin=user_in.is_admin)

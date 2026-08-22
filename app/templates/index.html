@@ -148,11 +148,9 @@
     <header>
         <h1>🎵 Еврокомиссия</h1>
         <div>
-            {% if current_user %}
             <span>Вы вошли как <strong>{{ current_user.username }}</strong></span>
             <form method="post" action="/logout"><button type="submit" class="secondary outline">Выйти</button></form>
-            {% else %}<span>Гостевой режим</span><a href="/login" role="button" class="secondary outline">Войти</a>{% endif %}
-            <a href="/admin" role="button" class="secondary outline">Администрирование</a>
+            {% if current_user.is_admin %}<a href="/admin" role="button" class="secondary outline">Администрирование</a>{% endif %}
         </div>
     </header>
     <p><small>Кто найдет больше багов, тому дадим эксклюзивный смайлик в имя</small></p>
