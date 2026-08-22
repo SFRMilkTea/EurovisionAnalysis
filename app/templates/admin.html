@@ -106,6 +106,7 @@
                     <th>Название</th>
                     <th>Год</th>
                     <th>Хозяин</th>
+                    <th>Настройки оценок</th>
                     <th></th>
                 </tr>
                 </thead>
@@ -120,6 +121,11 @@
                             </option>
                             {% endfor %}</select></td>
                     </form>
+                    <td><form id="event-settings-{{ row.id }}" method="post" action="/admin/events/{{ row.id }}/settings"></form>
+                        <label><input form="event-settings-{{ row.id }}" type="checkbox" name="is_current" {% if row.is_current %}checked{% endif %}> Текущее</label>
+                        <label><input form="event-settings-{{ row.id }}" type="checkbox" name="first_stage_open" {% if row.first_stage_open %}checked{% endif %}> Первые оценки открыты</label>
+                        <label><input form="event-settings-{{ row.id }}" type="checkbox" name="final_stage_open" {% if row.final_stage_open %}checked{% endif %}> Финальные оценки открыты</label>
+                        <button form="event-settings-{{ row.id }}" class="small secondary">Применить</button></td>
                     <td class="actions">
                         <button form="event-{{ row.id }}" class="small">Сохранить</button>
                         <form method="post" action="/admin/events/{{ row.id }}/delete" style="display:inline">

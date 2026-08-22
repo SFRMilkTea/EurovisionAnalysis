@@ -202,7 +202,7 @@
             <tr>
                 <td class="sticky-col">
                     <strong>{{ song.country.name }}</strong><br>
-                    <small>{{ song.name }}</small>
+                    <small>{% if song.url %}<a href="{{ song.url }}" target="_blank" rel="noopener noreferrer">{{ song.name }}</a>{% else %}{{ song.name }}{% endif %}</small>
                 </td>
 
                 {# Первое прослушивание #}
@@ -210,7 +210,7 @@
                 {% for user in users %}
                 {% set op = opinions_map.get((song.id, user.id, 'FIRST')) %}
                 {% if op %}{% set first.total = first.total + op.score %}{% set first.count = first.count + 1 %}{% endif %}
-                {% if current_user and user.id == current_user.id %}
+                {% if current_user and user.id == current_user.id and selected_event and selected_event.first_stage_open %}
                 <td class="current-user-column"><div class="editable-control">
                     <select form="first-{{ song.id }}" name="score">
                         {% for value in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
@@ -233,7 +233,7 @@
                 {% for user in users %}
                 {% set op = opinions_map.get((song.id, user.id, 'FINAL')) %}
                 {% if op %}{% set final.total = final.total + op.score %}{% set final.count = final.count + 1 %}{% endif %}
-                {% if current_user and user.id == current_user.id %}
+                {% if current_user and user.id == current_user.id and selected_event and selected_event.final_stage_open %}
                 <td class="current-user-column"><div class="editable-control">
                     <select form="final-{{ song.id }}" name="score">
                         {% for value in [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12] %}
