@@ -44,8 +44,8 @@
             <thead><tr><th>Логин</th><th>Почта</th><th>Администратор</th><th>Активен</th><th>Последний вход</th><th>Действия</th></tr></thead>
             <tbody>{% for user in users %}
             <tr>
-                <td>{{ user.username }}</td><td>{{ user.email or '—' }}</td>
-                <td><form id="user-{{ user.id }}" method="post" action="/admin/users/{{ user.id }}/update"><input type="checkbox" name="is_admin" {% if user.is_admin %}checked{% endif %} aria-label="Права администратора для {{ user.username }}"></form></td>
+                <td><form id="user-{{ user.id }}" method="post" action="/admin/users/{{ user.id }}/update"><input name="username" value="{{ user.username }}" minlength="3" maxlength="50" required aria-label="Логин пользователя"></form></td><td>{{ user.email or '—' }}</td>
+                <td><input form="user-{{ user.id }}" type="checkbox" name="is_admin" {% if user.is_admin %}checked{% endif %} aria-label="Права администратора для {{ user.username }}"></td>
                 <td><input form="user-{{ user.id }}" type="checkbox" name="is_active" {% if user.is_active %}checked{% endif %} aria-label="Активность {{ user.username }}"></td>
                 <td>{{ user.last_login_at.strftime('%d.%m.%Y %H:%M') if user.last_login_at else '—' }}</td>
                 <td><button form="user-{{ user.id }}" class="secondary" type="submit">Сохранить</button> <form method="post" action="/admin/users/{{ user.id }}/delete" style="display:inline"><button class="outline contrast delete" onclick="return confirm('Удалить пользователя и все его оценки?')">Удалить</button></form></td>

@@ -11,9 +11,9 @@ class UserRegister(BaseModel):
 
 # Что админ отправляет на сервер для создания юзера
 class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_-]+$")
+    username: str = Field(min_length=3, max_length=50)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=72)
+    password: str = Field(min_length=3, max_length=72)
     is_admin: bool = False
 
 
