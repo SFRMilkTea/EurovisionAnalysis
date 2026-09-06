@@ -210,6 +210,11 @@ def admin_page(request: Request, edit: str | None = None, session: Session = Dep
     return spa_page()
 
 
+@app.get("/admin/songs/{song_id}", response_class=HTMLResponse)
+def admin_song_page(song_id: int):
+    return spa_page()
+
+
 @app.post("/admin/countries")
 def admin_create_country(request: Request, name: str = Form(), session: Session = Depends(get_session)):
     require_session_admin(request, session)
