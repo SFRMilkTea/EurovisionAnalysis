@@ -1,5 +1,24 @@
 # Eurovision Analysis
 
+## Frontend (React)
+
+The React client lives in `client`; FastAPI remains in `app` and provides both the API and
+the production static-file host. The UI uses the existing session cookie, so no token is stored
+in the browser.
+
+For local frontend work, start FastAPI on port 8000 and then run these commands in a second
+terminal:
+
+```bash
+cd client
+pnpm install
+pnpm dev
+```
+
+Vite runs at `http://localhost:5173` and proxies API requests to FastAPI. For a production
+build, run `pnpm build`; it writes the bundle to `app/static`. Docker builds that bundle
+automatically in its Node build stage.
+
 ## Deploy to Amvera Cloud
 
 Amvera builds the application from `Dockerfile`; `docker-compose.yml` is not used.
