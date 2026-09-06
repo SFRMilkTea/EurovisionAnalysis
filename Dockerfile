@@ -18,7 +18,7 @@ COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY app ./app
-COPY --from=client-build /app/app/static ./app/static
+COPY --from=client-build /app/static ./app/static
 COPY migrations ./migrations
 COPY alembic.ini ./
 
