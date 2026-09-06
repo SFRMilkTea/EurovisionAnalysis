@@ -2,13 +2,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.staticfiles import StaticFiles
 
 from app import models
 from app.config import settings
@@ -23,6 +24,11 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "app/templates"))
 
 app = FastAPI()
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
+STATIC_DIR = BASE_DIR / "app" / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+(STATIC_DIR / "assets").mkdir(exist_ok=True)
+app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
 
 
 def get_current_user(request: Request, session: Session) -> models.User | None:
@@ -57,9 +63,7 @@ def admin_redirect(request: Request) -> RedirectResponse:
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
-    if request.session.get("user_id"):
-        return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse(request, "login.html", {"error": None})
+    return spa_page()
 
 
 @app.post("/login")
@@ -104,79 +108,106 @@ def logout(request: Request):
     return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
 
 
+def spa_page() -> FileResponse:
+    """React production build entry point (Vite writes it during Docker build)."""
+    index = STATIC_DIR / "index.html"
+    if not index.exists():
+        raise HTTPException(status_code=503, detail="React client has not been built. Run npm install and npm run build in client.")
+    return FileResponse(index)
+
+
 @app.get("/", response_class=HTMLResponse)
-def read_root(
-        request: Request,
-        event_id: int | None = None,
-        session: Session = Depends(get_session),
-):
+def read_root():
+    return spa_page()
+
+
+@app.get("/api/me")
+def api_me(request: Request, session: Session = Depends(get_session)):
+    user = get_current_user(request, session)
+    if user is None:
+        return JSONResponse({"detail": "Требуется вход"}, status_code=status.HTTP_401_UNAUTHORIZED)
+    return {"id": user.id, "username": user.username, "email": user.email,
+            "is_admin": user.is_admin, "is_active": user.is_active}
+
+
+@app.post("/api/session/login")
+def api_login(request: Request, email: str = Form(), password: str = Form(), session: Session = Depends(get_session)):
+    user = session.scalars(select(models.User).where(models.User.email == email)).first()
+    if not user or not user.is_active or not verify_password(password, user.password_hash):
+        return JSONResponse({"detail": "Неверный логин или пароль"}, status_code=status.HTTP_401_UNAUTHORIZED)
+    user.last_login_at = datetime.now(timezone.utc)
+    session.commit()
+    request.session["user_id"] = user.id
+    return {"id": user.id, "username": user.username, "is_admin": user.is_admin}
+
+
+@app.post("/api/session/logout")
+def api_logout(request: Request):
+    request.session.clear()
+    return {"ok": True}
+
+
+@app.get("/api/dashboard")
+def api_dashboard(request: Request, event_id: int | None = None, session: Session = Depends(get_session)):
     current_user = get_current_user(request, session)
     if current_user is None:
-        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
-
-    events = session.scalars(
-        select(models.Event).order_by(models.Event.is_current.desc(), models.Event.year.desc(), models.Event.name)
-    ).all()
-    selected_event = next((event for event in events if event.id == event_id), None)
-    if selected_event is None:
-        selected_event = next((event for event in events if event.is_current), None)
-    if selected_event is None and events:
-        selected_event = events[0]
-
-    songs_query = select(models.Song).options(selectinload(models.Song.country))
-    if selected_event is not None:
-        songs_query = songs_query.where(models.Song.event_id == selected_event.id)
-    else:
-        songs_query = songs_query.where(models.Song.event_id.is_(None))
-    songs = session.scalars(songs_query).all()
-    users = session.scalars(select(models.User)).all()
-    opinions_map = {
-        (op.song_id, op.user_id, op.stage.value): op
-        for op in session.scalars(select(models.Opinion)).all()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Требуется вход")
+    events = session.scalars(select(models.Event).options(selectinload(models.Event.host)).order_by(
+        models.Event.is_current.desc(), models.Event.year.desc(), models.Event.name)).all()
+    selected = next((event for event in events if event.id == event_id), None)
+    selected = selected or next((event for event in events if event.is_current), None) or (events[0] if events else None)
+    query = select(models.Song).options(selectinload(models.Song.country))
+    query = query.where(models.Song.event_id == selected.id) if selected else query.where(models.Song.event_id.is_(None))
+    songs = session.scalars(query).all()
+    return {
+        "events": [{"id": event.id, "name": event.name, "year": event.year, "host": event.host.name,
+                    "is_current": event.is_current, "first_stage_open": event.first_stage_open,
+                    "final_stage_open": event.final_stage_open} for event in events],
+        "selected_event_id": selected.id if selected else None,
+        "songs": [{"id": song.id, "country": song.country.name, "name": song.name, "artist": song.artist,
+                   "url": song.url} for song in songs],
+        "users": [{"id": user.id, "username": user.username} for user in session.scalars(select(models.User)).all()],
+        "opinions": [{"song_id": op.song_id, "user_id": op.user_id, "stage": op.stage.value,
+                      "score": op.score, "note": op.note} for op in session.scalars(select(models.Opinion)).all()],
+        "current_user": {"id": current_user.id, "username": current_user.username, "is_admin": current_user.is_admin},
     }
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "songs": songs,
-            "events": events,
-            "selected_event": selected_event,
-            "users": users,
-            "opinions_map": opinions_map,
-            "current_user": current_user,
-        },
-    )
+
+
+@app.get("/api/admin")
+def api_admin(request: Request, session: Session = Depends(get_session)):
+    require_session_admin(request, session)
+    countries = session.scalars(select(models.Country).order_by(models.Country.name)).all()
+    events = session.scalars(select(models.Event).options(selectinload(models.Event.host)).order_by(models.Event.year.desc())).all()
+    songs = session.scalars(select(models.Song).options(selectinload(models.Song.country), selectinload(models.Song.event)).order_by(models.Song.year.desc(), models.Song.name)).all()
+    genres_by_song, languages_by_song = {}, {}
+    for row in session.scalars(select(models.SongGenre)).all(): genres_by_song.setdefault(row.song_id, []).append(row.genre_id)
+    for row in session.scalars(select(models.SongLanguage)).all(): languages_by_song.setdefault(row.song_id, []).append(row.language_id)
+    return {
+        "countries": [{"id": x.id, "name": x.name} for x in countries],
+        "genres": [{"id": x.id, "name": x.name} for x in session.scalars(select(models.Genre).order_by(models.Genre.name)).all()],
+        "languages": [{"id": x.id, "name": x.name} for x in session.scalars(select(models.Language).order_by(models.Language.name)).all()],
+        "events": [{"id": x.id, "name": x.name, "year": x.year, "host_id": x.host_id, "host": x.host.name,
+                    "is_current": x.is_current, "first_stage_open": x.first_stage_open, "final_stage_open": x.final_stage_open} for x in events],
+        "users": [{"id": x.id, "username": x.username, "email": x.email, "is_admin": x.is_admin, "is_active": x.is_active} for x in session.scalars(select(models.User).order_by(models.User.username)).all()],
+        "songs": [{"id": x.id, "country_id": x.country_id, "country": x.country.name, "event_id": x.event_id,
+                   "event": x.event.name if x.event else None, "year": x.year, "name": x.name, "artist": x.artist,
+                   "vocal": x.vocal.value, "bpm": x.bpm, "key": x.key, "energy": x.energy,
+                   "danceability": x.danceability, "happiness": x.happiness, "url": x.url,
+                   "genre_ids": genres_by_song.get(x.id, []), "language_ids": languages_by_song.get(x.id, [])} for x in songs],
+        "vocals": [x.value for x in models.Vocal],
+    }
+
+
+@app.get("/api/admin/message")
+def api_admin_message(request: Request, session: Session = Depends(get_session)):
+    """Returns feedback produced by legacy admin mutation handlers for the React client."""
+    require_session_admin(request, session)
+    return {"message": request.session.pop("admin_message", None)}
 
 
 @app.get("/admin", response_class=HTMLResponse)
 def admin_page(request: Request, edit: str | None = None, session: Session = Depends(get_session)):
-    current_user = get_current_user(request, session)
-    if current_user is None:
-        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
-    require_session_admin(request, session)
-    message = request.session.pop("admin_message", None)
-    countries = session.scalars(select(models.Country).order_by(models.Country.name)).all()
-    events = session.scalars(
-        select(models.Event).options(selectinload(models.Event.host)).order_by(models.Event.year.desc())).all()
-    genres = session.scalars(select(models.Genre).order_by(models.Genre.name)).all()
-    languages = session.scalars(select(models.Language).order_by(models.Language.name)).all()
-    users = session.scalars(select(models.User).order_by(models.User.username)).all()
-    songs = session.scalars(
-        select(models.Song).options(selectinload(models.Song.country), selectinload(models.Song.event)).order_by(
-            models.Song.year.desc(), models.Song.name)
-    ).all()
-    song_genres = {}
-    for link in session.scalars(select(models.SongGenre)).all():
-        song_genres.setdefault(link.song_id, set()).add(link.genre_id)
-    song_languages = {}
-    for link in session.scalars(select(models.SongLanguage)).all():
-        song_languages.setdefault(link.song_id, set()).add(link.language_id)
-    return templates.TemplateResponse(request, "admin.html", {
-        "current_user": current_user, "message": message, "countries": countries,
-        "events": events, "genres": genres, "languages": languages, "songs": songs, "users": users,
-        "vocals": list(models.Vocal), "edit": edit,
-        "song_genres": song_genres, "song_languages": song_languages,
-    })
+    return spa_page()
 
 
 @app.post("/admin/countries")
