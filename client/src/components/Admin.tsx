@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from '../api/client'
 import type { AdminData, CatalogItem, FormValues } from '../types'
+import { Notification, type NotificationType } from './Notification'
 import { SongForm } from './SongForm'
 
 type Tab = 'songs' | 'events' | 'users' | 'countries' | 'genres' | 'languages'
+type ActionResult = { ok: boolean; type: NotificationType; text: string }
+type AdminAction = (url: string, values: FormValues, question?: string, showGlobalNotice?: boolean) => Promise<ActionResult>
 const tabs: Array<[Tab, string]> = [['songs', 'Песни'], ['events', 'Мероприятия'], ['users', 'Пользователи'], ['countries', 'Страны'], ['genres', 'Жанры'], ['languages', 'Языки']]
 const Field = ({ label, children }: { label: string; children: ReactNode }) => <label>{label}{children}</label>
 
@@ -21,11 +24,28 @@ function SectionHeading({ title, count, children }: { title: string; count?: num
 }
 
 export function Admin({ onBack, onEditSong }: { onBack: () => void; onEditSong: (songId: number) => void }) {
-  const [data, setData] = useState<AdminData | null>(null), [tab, setTab] = useState<Tab>('songs'), [notice, setNotice] = useState('')
-  const load = () => void api.admin().then(result => { if (result) setData(result) }).catch(error => setNotice((error as Error).message))
+  const [data, setData] = useState<AdminData | null>(null), [tab, setTab] = useState<Tab>('songs'), [notice, setNotice] = useState<ActionResult | null>(null)
+  const load = () => void api.admin().then(result => { if (result) setData(result) }).catch(error => setNotice({ ok: false, type: 'error', text: (error as Error).message }))
   useEffect(load, [])
-  async function action(url: string, values: FormValues, question?: string) { if (question && !window.confirm(question)) return; try { await api.adminAction(url, values); const result = await api.adminMessage(); const message = result?.message; setNotice(message?.text ?? 'Сохранено'); if (message?.kind !== 'error') load() } catch (error) { setNotice((error as Error).message) } }
-  if (!data) return <main className="loading-screen"><span className="loader" />Загружаем данные…{notice && <p className="alert error">{notice}</p>}</main>
+  async function action(url: string, values: FormValues, question?: string, showGlobalNotice = true): Promise<ActionResult> {
+    if (question && !window.confirm(question)) return { ok: false, type: 'warning', text: '' }
+    if (!showGlobalNotice) setNotice(null)
+    try {
+      await api.adminAction(url, values)
+      const result = await api.adminMessage()
+      const message = result?.message
+      const type: NotificationType = message?.kind === 'error' ? 'error' : message?.kind === 'warning' ? 'warning' : 'success'
+      const outcome = { ok: type === 'success', type, text: message?.text ?? 'Сохранено' }
+      if (showGlobalNotice) setNotice(outcome)
+      if (outcome.ok) load()
+      return outcome
+    } catch (error) {
+      const outcome: ActionResult = { ok: false, type: 'error', text: (error as Error).message }
+      if (showGlobalNotice) setNotice(outcome)
+      return outcome
+    }
+  }
+  if (!data) return <main className="loading-screen"><span className="loader" />Загружаем данные…{notice && <Notification type={notice.type} message={notice.text} onClose={() => setNotice(null)} />}</main>
 
   const Catalog = ({ type, title }: { type: 'countries' | 'genres' | 'languages'; title: string }) => <section className="content-card">
     <SectionHeading title={title} count={data[type].length}>Добавляйте новые значения или изменяйте существующие прямо в таблице.</SectionHeading>
@@ -34,8 +54,8 @@ export function Admin({ onBack, onEditSong }: { onBack: () => void; onEditSong: 
   </section>
 
   return <main className="app-shell admin-page">
-    <header className="topbar"><div className="brand"><span className="brand-mark small" aria-hidden="true">E</span><div><span className="eyebrow">Панель управления</span><h1>Администрирование</h1></div></div><button type="button" className="button-ghost" onClick={onBack}>← К оценкам</button></header>
-    {notice && <p className={`alert ${notice === 'Сохранено' || notice.toLowerCase().includes('сохран') ? 'success' : 'error'}`} role="status">{notice}</p>}
+    <header className="topbar"><div className="brand"><span className="brand-mark small" aria-hidden="true">?</span><div><span className="eyebrow">Панель управления</span><h1>Администрирование</h1></div></div><button type="button" className="button-ghost" onClick={onBack}>← К оценкам</button></header>
+    {notice && <Notification type={notice.type} message={notice.text} onClose={() => setNotice(null)} />}
     <nav className="tabs admin-tabs" aria-label="Разделы администрирования">{tabs.map(([id, title]) => <button type="button" key={id} onClick={() => setTab(id)} className={tab === id ? 'active' : ''} aria-pressed={tab === id}>{title}</button>)}</nav>
     {tab === 'countries' && <Catalog type="countries" title="Страны" />}
     {tab === 'genres' && <Catalog type="genres" title="Жанры" />}
@@ -46,7 +66,7 @@ export function Admin({ onBack, onEditSong }: { onBack: () => void; onEditSong: 
   </main>
 }
 
-function Events({ data, action }: { data: AdminData; action: (url: string, values: FormValues, question?: string) => void }) {
+function Events({ data, action }: { data: AdminData; action: AdminAction }) {
   const blank = { name: '', year: new Date().getFullYear(), host_id: data.countries[0]?.id }
   return <section className="content-card"><SectionHeading title="Мероприятия" count={data.events.length}>Управляйте сезонами и доступностью этапов голосования.</SectionHeading>
     <Editor initial={blank} submit={value => action('/admin/events', value)} render={(value, set) => <><Field label="Название"><input value={String(value.name)} onChange={event => set('name', event.target.value)} required /></Field><Field label="Год"><input type="number" value={Number(value.year)} onChange={event => set('year', event.target.value)} required /></Field><Field label="Страна-хозяин"><Select value={value.host_id as number} onChange={item => set('host_id', item)} options={data.countries} /></Field></>} />
@@ -54,17 +74,25 @@ function Events({ data, action }: { data: AdminData; action: (url: string, value
   </section>
 }
 
-function Users({ data, action }: { data: AdminData; action: (url: string, values: FormValues, question?: string) => void }) {
+function Users({ data, action }: { data: AdminData; action: AdminAction }) {
   return <section className="content-card"><SectionHeading title="Пользователи" count={data.users.length}>Добавляйте участников и настраивайте их доступ.</SectionHeading>
     <Editor initial={{ username: '', email: '', password: '', is_admin: false }} submit={value => action('/admin/users', value)} render={(value, set) => <><Field label="Имя"><input value={String(value.username)} onChange={event => set('username', event.target.value)} required /></Field><Field label="Почта"><input type="email" value={String(value.email)} onChange={event => set('email', event.target.value)} required /></Field><Field label="Пароль"><input type="password" value={String(value.password)} onChange={event => set('password', event.target.value)} required /></Field><label className="checkbox-field"><input type="checkbox" checked={Boolean(value.is_admin)} onChange={event => set('is_admin', event.target.checked)} />Администратор</label></>} />
     <div className="table admin-table"><table><thead><tr><th>Пользователь</th><th>Почта</th><th>Администратор</th><th>Активен</th><th /></tr></thead><tbody>{data.users.map(item => <tr key={item.id}><td><input aria-label="Имя пользователя" defaultValue={item.username} onBlur={event => action(`/admin/users/${item.id}/update`, { ...item, username: event.target.value })} /></td><td>{item.email}</td><td><input aria-label="Права администратора" type="checkbox" role="switch" defaultChecked={item.is_admin} onChange={event => action(`/admin/users/${item.id}/update`, { ...item, is_admin: event.target.checked })} /></td><td><input aria-label="Пользователь активен" type="checkbox" role="switch" defaultChecked={item.is_active} onChange={event => action(`/admin/users/${item.id}/update`, { ...item, is_active: event.target.checked })} /></td><td className="action-cell"><button type="button" className="danger button-small" onClick={() => action(`/admin/users/${item.id}/delete`, {}, 'Удалить пользователя?')}>Удалить</button></td></tr>)}</tbody></table></div>
   </section>
 }
 
-function Songs({ data, action, onEditSong }: { data: AdminData; action: (url: string, values: FormValues, question?: string) => void; onEditSong: (songId: number) => void }) {
+function Songs({ data, action, onEditSong }: { data: AdminData; action: AdminAction; onEditSong: (songId: number) => void }) {
+  const [formNotice, setFormNotice] = useState<ActionResult | null>(null)
+  const [formVersion, setFormVersion] = useState(0)
   const blank: FormValues = { name: '', artist: '', year: new Date().getFullYear(), vocal: data.vocals[0], country_id: data.countries[0]?.id, event_id: '', bpm: '', key: '', energy: '', danceability: '', happiness: '', url: '', genre_ids: [], language_ids: [] }
+  const addSong = async (values: FormValues) => {
+    setFormNotice(null)
+    const result = await action('/admin/songs', values, undefined, false)
+    setFormNotice(result)
+    if (result.ok) setFormVersion(version => version + 1)
+  }
   return <section className="content-card"><SectionHeading title="Песни" count={data.songs.length}>Добавляйте участников и редактируйте музыкальные характеристики.</SectionHeading>
-    <details className="create-panel"><summary>Добавить новую песню</summary><SongForm initial={blank} data={data} submitLabel="Добавить песню" onSubmit={value => action('/admin/songs', value)} /></details>
-    <div className="table admin-table songs-table"><table><thead><tr><th>Песня</th><th>Год и вокал</th><th>Страна и мероприятие</th><th>Характеристики</th><th /></tr></thead><tbody>{data.songs.map(song => <tr key={song.id}><td className="song-title"><strong>{song.name}</strong><small>{song.artist}</small></td><td>{song.year}<br /><span className="muted">{song.vocal}</span></td><td>{song.country}<br /><span className="muted">{song.event || 'Без мероприятия'}</span></td><td className="metrics-summary"><span>BPM <b>{song.bpm ?? '—'}</b></span><span>Энергия <b>{song.energy ?? '—'}</b></span><span>Танцы <b>{song.danceability ?? '—'}</b></span><span>Позитив <b>{song.happiness ?? '—'}</b></span></td><td><div className="song-actions"><button type="button" className="button-small" onClick={() => onEditSong(song.id)}>Изменить</button><button type="button" className="danger button-small" onClick={() => action(`/admin/songs/${song.id}/delete`, {}, 'Удалить песню?')}>Удалить</button></div></td></tr>)}</tbody></table></div>
+    <details className="create-panel"><summary>Добавить новую песню</summary><SongForm key={formVersion} initial={blank} data={data} submitLabel="Добавить песню" notice={formNotice} onDismissNotice={() => setFormNotice(null)} onSubmit={value => void addSong(value)} /></details>
+    <div className="table admin-table songs-table"><table><thead><tr><th>Песня</th><th>Год и вокал</th><th>Страна и мероприятие</th><th>Характеристики</th><th /></tr></thead><tbody>{data.songs.map(song => <tr key={song.id}><td className="song-title"><strong>{song.name}</strong><small>{song.artist}</small></td><td>{song.year}<br /><span className="muted">{song.vocal}</span></td><td>{song.country}<br /><span className="muted">{song.event || 'Без мероприятия'}</span></td><td><div className="metrics-summary"><span>BPM <b>{song.bpm ?? '—'}</b></span><span>Энергия <b>{song.energy ?? '—'}</b></span><span>Танцы <b>{song.danceability ?? '—'}</b></span><span>Позитив <b>{song.happiness ?? '—'}</b></span></div></td><td><div className="song-actions"><button type="button" className="button-small" onClick={() => onEditSong(song.id)}>Изменить</button><button type="button" className="danger button-small" onClick={() => action(`/admin/songs/${song.id}/delete`, {}, 'Удалить песню?')}>Удалить</button></div></td></tr>)}</tbody></table></div>
   </section>
 }
