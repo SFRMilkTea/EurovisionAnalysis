@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { api } from '../api/client'
 import type { User } from '../types'
+import { Notification } from './Notification'
 
 export function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const [error, setError] = useState('')
@@ -16,12 +17,12 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
         <h1>Еврокомиссия</h1>
         <p>Оценивайте выступления и делитесь впечатлениями.</p>
       </div>
-      {error && <p className="alert error" role="alert">{error}</p>}
       <form className="login-form" onSubmit={submit}>
         <label>Почта<input name="email" type="email" autoComplete="email" placeholder="name@example.com" required autoFocus /></label>
         <label>Пароль<input name="password" type="password" autoComplete="current-password" placeholder="Введите пароль" required /></label>
         <button type="submit">Войти</button>
       </form>
+      {error && <Notification type="error" message={error} onClose={() => setError('')} />}
     </section>
   </main>
 }

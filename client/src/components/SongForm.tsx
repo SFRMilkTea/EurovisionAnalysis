@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import type { AdminData, CatalogItem, FormValues } from '../types'
+import { Notification, type NotificationType } from './Notification'
 
 interface SongFormProps {
   initial: FormValues
   data: AdminData
   submitLabel: string
+  notice?: { type: NotificationType; text: string } | null
+  onDismissNotice?: () => void
   onSubmit: (values: FormValues) => void
 }
 
@@ -26,7 +29,7 @@ function ComboList({ label, options, initial, onChange }: { label: string; optio
   return <div className="combo-list"><span className="combo-label">{label}</span>{items.map((value, index) => <div className="combo-row" key={index}><select value={value} onChange={event => update(index, event.target.value)}><option value="">Выберите значение</option>{options.filter(option => option.id.toString() === value || !selected.includes(option.id.toString())).map(option => <option key={option.id} value={option.id}>{option.name}</option>)}</select><button type="button" className="combo-remove secondary outline" onClick={() => remove(index)} aria-label={`Удалить поле «${label}»`}>×</button></div>)}<button type="button" className="combo-add secondary outline" onClick={add} disabled={selected.length >= options.length || items.some(item => !item)}>+ Добавить</button></div>
 }
 
-export function SongForm({ initial, data, submitLabel, onSubmit }: SongFormProps) {
+export function SongForm({ initial, data, submitLabel, notice, onDismissNotice, onSubmit }: SongFormProps) {
   const [value, setValue] = useState<FormValues>(initial)
   const set = (key: string, item: FormValues[string]) => setValue(current => ({ ...current, [key]: item }))
   const submit = (event: FormEvent) => { event.preventDefault(); onSubmit(value) }
@@ -51,5 +54,6 @@ export function SongForm({ initial, data, submitLabel, onSubmit }: SongFormProps
       <ComboList label="Языки" options={data.languages} initial={(value.language_ids as Array<number | string>) ?? []} onChange={items => set('language_ids', items)} />
     </div></fieldset>
     <div className="form-actions"><button type="submit">{submitLabel}</button></div>
+    {notice?.text && onDismissNotice && <Notification type={notice.type} message={notice.text} onClose={onDismissNotice} />}
   </form>
 }
