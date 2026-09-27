@@ -12,7 +12,7 @@ export default function App() {
   useEffect(() => { void api.me().then(setMe).catch(() => setMe(null)) }, [])
   useEffect(() => { const handlePopState = () => setPath(location.pathname); addEventListener('popstate', handlePopState); return () => removeEventListener('popstate', handlePopState) }, [])
   const navigate = (nextPath: string) => { history.pushState({}, '', nextPath); setPath(nextPath) }
-  if (me === undefined) return null
+  if (me === undefined) return <main className="loading-screen"><span className="loader" />Открываем Еврокомиссию…</main>
   if (!me) return <Login onLogin={user => { setMe(user); history.replaceState({}, '', '/'); setPath('/') }} />
   const songMatch = path.match(/^\/admin\/songs\/(\d+)$/)
   if (songMatch && me.is_admin) return <SongEditPage songId={Number(songMatch[1])} onBack={() => navigate('/admin')} />
