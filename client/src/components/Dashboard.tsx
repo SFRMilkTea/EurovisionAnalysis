@@ -32,6 +32,58 @@ function AutoGrowComment({
   )
 }
 
+function DashboardCell({
+  song,
+  user,
+  stage,
+  open,
+  meId,
+  opinion,
+  onSaveScore,
+  onSaveNote,
+}: {
+  song: Song
+  user: User
+  stage: Stage
+  open: boolean
+  meId: number
+  opinion?: Opinion
+  onSaveScore: (songId: number, stage: Stage, score: number | string) => void
+  onSaveNote: (songId: number, stage: Stage, note: string) => void
+}) {
+  const editable = user.id === meId && open
+  if (!editable)
+    return (
+      <>
+        <td className="score-cell">{opinion?.score ?? '–'}</td>
+        <td className="note opinion-cell">
+          {opinion?.note || <span className="muted">Нет мнения</span>}
+        </td>
+      </>
+    )
+  return (
+    <>
+      <td className="mine score-cell">
+        <select
+          aria-label={`Оценка для ${song.name}`}
+          value={opinion?.score ?? 0}
+          onChange={(event) => onSaveScore(song.id, stage, event.target.value)}
+        >
+          {SCORES.map((score) => (
+            <option key={score}>{score}</option>
+          ))}
+        </select>
+      </td>
+      <td className="mine note opinion-cell">
+        <AutoGrowComment
+          value={opinion?.note || ''}
+          onSave={(note) => onSaveNote(song.id, stage, note)}
+        />
+      </td>
+    </>
+  )
+}
+
 export function Dashboard({
   me,
   onLogout,
@@ -119,52 +171,6 @@ export function Dashboard({
         )}
       </main>
     )
-  const Cell = ({
-    song,
-    user,
-    stage,
-    open,
-  }: {
-    song: Song
-    user: User
-    stage: Stage
-    open: boolean
-  }) => {
-    const opinion = opinions.get(`${song.id}:${user.id}:${stage}`),
-      editable = user.id === me.id && open
-    if (!editable)
-      return (
-        <>
-          <td className="score-cell">{opinion?.score ?? '–'}</td>
-          <td className="note opinion-cell">
-            {opinion?.note || <span className="muted">Нет мнения</span>}
-          </td>
-        </>
-      )
-    return (
-      <>
-        <td className="mine score-cell">
-          <select
-            aria-label={`Оценка для ${song.name}`}
-            value={opinion?.score ?? 0}
-            onChange={(event) =>
-              saveScore(song.id, stage, event.target.value)
-            }
-          >
-            {SCORES.map((score) => (
-              <option key={score}>{score}</option>
-            ))}
-          </select>
-        </td>
-        <td className="mine note opinion-cell">
-          <AutoGrowComment
-            value={opinion?.note || ''}
-            onSave={(note) => saveNote(song.id, stage, note)}
-          />
-        </td>
-      </>
-    )
-  }
   const average = (song: Song, stage: Stage) => {
     const scores = data.users
       .map((user) => opinions.get(`${song.id}:${user.id}:${stage}`)?.score)
@@ -321,22 +327,30 @@ export function Dashboard({
                       <small>{song.artist}</small>
                     </td>
                     {data.users.map((user) => (
-                      <Cell
+                      <DashboardCell
                         key={`first-${user.id}`}
                         song={song}
                         user={user}
                         stage="FIRST"
                         open={Boolean(event?.first_stage_open)}
+                        meId={me.id}
+                        opinion={opinions.get(`${song.id}:${user.id}:FIRST`)}
+                        onSaveScore={saveScore}
+                        onSaveNote={saveNote}
                       />
                     ))}
                     <td className="average">{average(song, 'FIRST')}</td>
                     {data.users.map((user) => (
-                      <Cell
+                      <DashboardCell
                         key={`final-${user.id}`}
                         song={song}
                         user={user}
                         stage="FINAL"
                         open={Boolean(event?.final_stage_open)}
+                        meId={me.id}
+                        opinion={opinions.get(`${song.id}:${user.id}:FINAL`)}
+                        onSaveScore={saveScore}
+                        onSaveNote={saveNote}
                       />
                     ))}
                     <td className="average">{average(song, 'FINAL')}</td>
