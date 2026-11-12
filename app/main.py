@@ -483,21 +483,16 @@ def admin_update_item(
     return RedirectResponse(f"/admin?edit={entity}", status_code=303)
 
 
-@app.post("/opinions/save")
-def save_opinion(
+def get_editable_opinion(
         request: Request,
-        song_id: int = Form(),
-        event_id: int | None = Form(default=None),
-        stage: models.Stage = Form(),
-        score: int = Form(),
-        note: str | None = Form(default=None),
-        session: Session = Depends(get_session),
-):
+        song_id: int,
+        event_id: int | None,
+        stage: models.Stage,
+        session: Session,
+) -> tuple[models.User, models.Opinion | None]:
     current_user = get_current_user(request, session)
     if current_user is None:
-        return JSONResponse({"detail": "Требуется вход"}, status_code=status.HTTP_401_UNAUTHORIZED)
-    if score not in {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12}:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Недопустимая оценка")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Требуется вход")
     song = session.get(models.Song, song_id)
     if song is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Песня не найдена")
@@ -518,10 +513,42 @@ def save_opinion(
             models.Opinion.stage == stage,
         )
     ).first()
+    return current_user, opinion
+
+
+@app.post("/opinions/score")
+def save_opinion_score(
+        request: Request,
+        song_id: int = Form(),
+        event_id: int | None = Form(default=None),
+        stage: models.Stage = Form(),
+        score: int = Form(),
+        session: Session = Depends(get_session),
+):
+    if score not in {0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Недопустимая оценка")
+    current_user, opinion = get_editable_opinion(request, song_id, event_id, stage, session)
     if opinion is None:
         opinion = models.Opinion(song_id=song_id, user_id=current_user.id, stage=stage, score=score)
         session.add(opinion)
     opinion.score = score
+    session.commit()
+    return {"ok": True}
+
+
+@app.post("/opinions/note")
+def save_opinion_note(
+        request: Request,
+        song_id: int = Form(),
+        event_id: int | None = Form(default=None),
+        stage: models.Stage = Form(),
+        note: str = Form(default=""),
+        session: Session = Depends(get_session),
+):
+    current_user, opinion = get_editable_opinion(request, song_id, event_id, stage, session)
+    if opinion is None:
+        opinion = models.Opinion(song_id=song_id, user_id=current_user.id, stage=stage, score=0)
+        session.add(opinion)
     opinion.note = note.strip() or None if note else None
     session.commit()
     return {"ok": True}

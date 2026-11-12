@@ -6,12 +6,15 @@ export const api = {
   login: (form: FormData) =>
     request<User>('/api/session/login', { method: 'POST', body: form }),
   logout: () => request('/api/session/logout', { method: 'POST' }),
-  dashboard: (eventId?: number | null) =>
+  dashboard: (eventId?: number | null, signal?: AbortSignal) =>
     request<DashboardData>(
       `/api/dashboard${eventId ? `?event_id=${eventId}` : ''}`,
+      { signal },
     ),
-  saveOpinion: (values: FormValues) =>
-    request('/opinions/save', { method: 'POST', body: toFormData(values) }),
+  saveOpinionScore: (values: FormValues) =>
+    request('/opinions/score', { method: 'POST', body: toFormData(values) }),
+  saveOpinionNote: (values: FormValues) =>
+    request('/opinions/note', { method: 'POST', body: toFormData(values) }),
   admin: () => request<AdminData>('/api/admin'),
   adminMessage: () =>
     request<{ message: { text: string; kind: string } | null }>(

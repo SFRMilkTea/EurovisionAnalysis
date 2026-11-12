@@ -44,19 +44,31 @@ export function Dashboard({
   const [data, setData] = useState<DashboardData | null>(null),
     [eventId, setEventId] = useState<number | null>(null),
     [error, setError] = useState('')
+  const dashboardRequest = useRef<AbortController | null>(null)
+  const saveQueue = useRef<Promise<void>>(Promise.resolve())
   const load = async (id: number | null = eventId) => {
+    dashboardRequest.current?.abort()
+    const controller = new AbortController()
+    dashboardRequest.current = controller
     try {
-      const result = await api.dashboard(id)
+      const result = await api.dashboard(id, controller.signal)
       if (result) {
         setData(result)
         setEventId(result.selected_event_id)
+        setError('')
       }
     } catch (e) {
+      if (controller.signal.aborted) return
       setError((e as Error).message)
+    } finally {
+      if (dashboardRequest.current === controller) {
+        dashboardRequest.current = null
+      }
     }
   }
   useEffect(() => {
     void load()
+    return () => dashboardRequest.current?.abort()
   }, [])
   const opinions = useMemo(
     () =>
@@ -68,24 +80,30 @@ export function Dashboard({
       ),
     [data],
   )
-  async function save(
-    songId: number,
-    stage: Stage,
-    score: number | string,
-    note: string,
-  ) {
-    try {
-      await api.saveOpinion({
+  function enqueueSave(action: () => Promise<unknown>) {
+    saveQueue.current = saveQueue.current.then(async () => {
+      try {
+        await action()
+        await load()
+      } catch (e) {
+        setError((e as Error).message)
+      }
+    })
+  }
+  function saveScore(songId: number, stage: Stage, score: number | string) {
+    enqueueSave(() =>
+      api.saveOpinionScore({
         song_id: songId,
         event_id: eventId,
         stage,
         score: Number(score),
-        note,
-      })
-      await load()
-    } catch (e) {
-      setError((e as Error).message)
-    }
+      }),
+    )
+  }
+  function saveNote(songId: number, stage: Stage, note: string) {
+    enqueueSave(() =>
+      api.saveOpinionNote({ song_id: songId, event_id: eventId, stage, note }),
+    )
   }
   if (!data)
     return (
@@ -130,7 +148,7 @@ export function Dashboard({
             aria-label={`Оценка для ${song.name}`}
             value={opinion?.score ?? 0}
             onChange={(event) =>
-              void save(song.id, stage, event.target.value, opinion?.note || '')
+              saveScore(song.id, stage, event.target.value)
             }
           >
             {SCORES.map((score) => (
@@ -141,9 +159,7 @@ export function Dashboard({
         <td className="mine note opinion-cell">
           <AutoGrowComment
             value={opinion?.note || ''}
-            onSave={(note) =>
-              void save(song.id, stage, opinion?.score ?? 0, note)
-            }
+            onSave={(note) => saveNote(song.id, stage, note)}
           />
         </td>
       </>
