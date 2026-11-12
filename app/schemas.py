@@ -9,7 +9,6 @@ class UserRegister(BaseModel):
     password: str = Field(min_length=3, max_length=72)
 
 
-# Что админ отправляет на сервер для создания юзера
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     email: EmailStr
@@ -17,7 +16,6 @@ class UserCreate(BaseModel):
     is_admin: bool = False
 
 
-# Что сервер отдает обратно (ОБЯЗАТЕЛЬНО БЕЗ пароля!)
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
